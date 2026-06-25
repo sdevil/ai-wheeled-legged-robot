@@ -16,7 +16,6 @@ class MotionCoreAdapter final : public MotionCore {
   void pulseButton(uint16_t button, uint32_t durationMs = 80);
   void setMoveAxes(int joyX, int joyY);
   void stopMove();
-  void clearTrackDriveOutput();
   void applyTrackTarget(int dx, int dy, int dz);
   void applyTrackObservation(const MotionCommand& command);
   void enterTrackingState(TrackObservationState state);

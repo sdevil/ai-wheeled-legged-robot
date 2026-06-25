@@ -529,15 +529,6 @@ void MotionCoreAdapter::stopMove() {
   axes_[3] = 0.0f;
 }
 
-void MotionCoreAdapter::clearTrackDriveOutput() {
-  trackDriveTarget_ = 0.0f;
-  trackDistanceEngaged_ = false;
-  trackDistanceCandidateDirection_ = 0;
-  trackDistanceCandidateFrames_ = 0;
-  filteredTrackDz_ = 0.0f;
-  axes_[3] = 0.0f;
-}
-
 void MotionCoreAdapter::updateStandNudge(uint32_t now) {
   if (!standNudgePending_ && standNudgeUntilMs_ == 0) return;
 
@@ -664,7 +655,8 @@ void MotionCoreAdapter::applyTrackTarget(int dx, int dy, int dz) {
   if (dx == 9999 || dy == 9999 ||
       !deadlineReached(millis(), trackSettleUntilMs_)) {
     trackYawTarget_ = 0.0f;
-    clearTrackDriveOutput();
+    trackDriveTarget_ = 0.0f;
+    trackDistanceEngaged_ = false;
     trackDecision_ = dx == 9999 || dy == 9999 ? "invalid_error" : "settling";
     return;
   }
@@ -672,7 +664,8 @@ void MotionCoreAdapter::applyTrackTarget(int dx, int dy, int dz) {
   const TrackingTuning tuning = trackingTuning(trackProfile_);
   trackYawTarget_ = 0.0f;
   trackYawEngaged_ = false;
-  clearTrackDriveOutput();
+  trackDriveTarget_ = 0.0f;
+  trackDistanceEngaged_ = false;
   trackDecision_ = "vision_lock_only";
   if (trackProfile_ == 1 && trackStableFrames_ < 6) {
     trackDecision_ = "waiting_stable_face";
@@ -681,7 +674,8 @@ void MotionCoreAdapter::applyTrackTarget(int dx, int dy, int dz) {
   if (trackConfidence_ > 0 && trackConfidence_ < tuning.minimumConfidence) {
     trackYawTarget_ = 0.0f;
     trackYawEngaged_ = false;
-    clearTrackDriveOutput();
+    trackDriveTarget_ = 0.0f;
+    trackDistanceEngaged_ = false;
     trackDecision_ = "low_confidence";
     return;
   }
@@ -711,23 +705,7 @@ void MotionCoreAdapter::applyTrackTarget(int dx, int dy, int dz) {
     else if (dz != 9999) dz = constrain(dz, -300, 300);
   }
 
-  int yawControlDx = dx;
-  if (trackFrameW_ > 0 && trackBoxW_ > 0) {
-    const float targetCenterX = (float)trackBoxX_ + (float)trackBoxW_ * 0.5f;
-    const float safeLeft = (float)trackFrameW_ / 3.0f;
-    const float safeRight = (float)trackFrameW_ * 2.0f / 3.0f;
-    float yawErrorPx = 0.0f;
-    if (targetCenterX < safeLeft) {
-      yawErrorPx = targetCenterX - safeLeft;
-    } else if (targetCenterX > safeRight) {
-      yawErrorPx = targetCenterX - safeRight;
-    }
-    yawControlDx = constrain((int)roundf(yawErrorPx * 1000.0f /
-                                         max(1.0f, (float)trackFrameW_ * 0.5f)),
-                             -1000, 1000);
-  }
-
-  filteredTrackDx_ += ((float)yawControlDx - filteredTrackDx_) * tuning.filterAlpha;
+  filteredTrackDx_ += ((float)dx - filteredTrackDx_) * tuning.filterAlpha;
   if (pitchControlDy == 0) {
     filteredTrackDy_ = 0.0f;
   } else {
@@ -743,7 +721,8 @@ void MotionCoreAdapter::applyTrackTarget(int dx, int dy, int dz) {
   if (!balanceQuiet) {
     trackYawTarget_ = 0.0f;
     trackYawEngaged_ = false;
-    clearTrackDriveOutput();
+    trackDriveTarget_ = 0.0f;
+    trackDistanceEngaged_ = false;
     trackDecision_ = "balance_not_quiet";
     return;
   }
@@ -759,9 +738,9 @@ void MotionCoreAdapter::applyTrackTarget(int dx, int dy, int dz) {
   ctrl.lqi_param.integral.yaw_rate_error = 0.0f;
 
   if (fabsf(filteredTrackDy_) > visionOnlyPitchDeadband &&
-      now - lastTrackGimbalUpdateMs_ >= 24U) {
+      now - lastTrackGimbalUpdateMs_ >= 30U) {
     const float pitchGain = trackProfile_ == 3 ? 0.018f : 0.008f;
-    const int maxPitchStep = 1;
+    const int maxPitchStep = trackProfile_ == 3 ? 2 : 1;
     int delta = constrain((int)roundf(-filteredTrackDy_ * pitchGain), -maxPitchStep, maxPitchStep);
     if (delta == 0) delta = filteredTrackDy_ > 0.0f ? -1 : 1;
     cameraTargetAngle_ = constrain(cameraTargetAngle_ + delta,
@@ -773,9 +752,7 @@ void MotionCoreAdapter::applyTrackTarget(int dx, int dy, int dz) {
     trackDecision_ = "inside_pitch_safe_zone";
     return;
   }
-  trackDecision_ = "vision_pitch_only";
-  lastTrackControlUpdateMs_ = now;
-  clearTrackDriveOutput();
+  trackDecision_ = "vision_lock_only";
   return;
 
   const uint32_t controlIntervalMs =
@@ -902,7 +879,9 @@ void MotionCoreAdapter::updateTrackingMotion(uint32_t now) {
     trackBalanceReadySinceMs_ = 0;
     trackYawTarget_ = 0.0f;
     axes_[0] = 0.0f;
-    clearTrackDriveOutput();
+    trackDriveTarget_ = 0.0f;
+    trackDistanceEngaged_ = false;
+    axes_[3] = 0.0f;
     lastTrackMotionUpdateMs_ = now;
     return;
   }
@@ -913,7 +892,9 @@ void MotionCoreAdapter::updateTrackingMotion(uint32_t now) {
   if (now - trackBalanceReadySinceMs_ < kTrackBalanceStableMs) {
     trackYawTarget_ = 0.0f;
     axes_[0] = 0.0f;
-    clearTrackDriveOutput();
+    trackDriveTarget_ = 0.0f;
+    trackDistanceEngaged_ = false;
+    axes_[3] = 0.0f;
     lastTrackMotionUpdateMs_ = now;
     return;
   }
@@ -929,7 +910,9 @@ void MotionCoreAdapter::updateTrackingMotion(uint32_t now) {
   if (trackState_ == TrackObservationState::Reacquiring) {
     const uint32_t elapsed = now - trackStateSinceMs_;
     trackYawTarget_ = 0.0f;
-    clearTrackDriveOutput();
+    trackDriveTarget_ = 0.0f;
+    trackDistanceEngaged_ = false;
+    axes_[3] = 0.0f;
     cameraTargetAngle_ = kCameraStandbyDeg;
     if (elapsed >= kSearchGiveUpMs) {
       enterTrackingState(TrackObservationState::Lost);
@@ -945,7 +928,9 @@ void MotionCoreAdapter::updateTrackingMotion(uint32_t now) {
   ctrl.jump_turn_yaw_rate_cmd = 0.0f;
   ctrl.lqi_param.ref.yaw_rate = 0.0f;
   ctrl.lqi_param.integral.yaw_rate_error = 0.0f;
-  clearTrackDriveOutput();
+  trackDriveTarget_ = 0.0f;
+  trackDistanceEngaged_ = false;
+  axes_[3] = 0.0f;
 }
 
 const char* MotionCoreAdapter::modeName() const {
