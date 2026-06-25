@@ -23,6 +23,7 @@ __pycache__/
 *.elf
 *.map
 *.log
+local_firmware_backup/
 
 # Local installers and vendor docs
 servo-setup/
