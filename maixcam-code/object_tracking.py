@@ -557,7 +557,13 @@ def _smooth(previous, current):
     current_x, current_y = _center(current)
     distance = ((current_x - previous_x) ** 2 + (current_y - previous_y) ** 2) ** 0.5
     diagonal = max(1.0, (previous[2] ** 2 + previous[3] ** 2) ** 0.5)
-    adaptive_alpha = min(0.98, TRACK_BBOX_SMOOTH_ALPHA + distance / diagonal * 0.18)
+    movement_ratio = distance / diagonal
+    if movement_ratio < 0.05:
+        adaptive_alpha = TRACK_BBOX_SMOOTH_ALPHA
+    elif movement_ratio < 0.15:
+        adaptive_alpha = 0.70
+    else:
+        adaptive_alpha = 0.45
     return [previous[i] + (current[i] - previous[i]) * adaptive_alpha for i in range(4)]
 
 
