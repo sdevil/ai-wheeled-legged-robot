@@ -1,0 +1,8 @@
+{
+  "name": "XboxControllerESP32",
+  "version": "1.0.0",
+  "description": "Vendored Xbox Series X BLE controller support used by WRobot",
+  "build": {
+    "srcDir": "src"
+  }
+}

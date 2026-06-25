@@ -1,0 +1,31 @@
+﻿MaixVision-1.2.2-setup*
+世博同学-驭风轮足机器人入门指导1215*
+maixcam-code/__pycache__/
+maixcam-code/*.local.py
+
+# Build outputs and local tool state
+.pio/
+**/.pio/
+.vscode/
+**/.vscode/
+dist/
+**/dist/
+build/
+**/build/
+node_modules/
+**/node_modules/
+__pycache__/
+**/__pycache__/
+*.pyc
+*.pyo
+*.zip
+*.bin
+*.elf
+*.map
+*.log
+
+# Local installers and vendor docs
+servo-setup/
+robot-wifi-test/
+flutter_ui/
+web-ui/

@@ -1,0 +1,16 @@
+id: wrobot_sdevil
+name: wrobot_sdevil
+version: 3.2.12
+author: sdevil
+icon: ''
+desc: >-
+  Vision firmware for WRobot - sdevil Enhanced with AI models, WiFi
+  auto-connect, and web camera preview.
+files:
+  - app.yaml
+  - camera_control.py
+  - config.py
+  - main.py
+  - object_tracking.py
+  - web_stream.py
+  - wifi_manager.py
