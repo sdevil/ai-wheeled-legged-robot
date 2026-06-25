@@ -740,7 +740,7 @@ void MotionCoreAdapter::applyTrackTarget(int dx, int dy, int dz) {
   if (fabsf(filteredTrackDy_) > visionOnlyPitchDeadband &&
       now - lastTrackGimbalUpdateMs_ >= 24U) {
     const float pitchGain = trackProfile_ == 3 ? 0.018f : 0.008f;
-    const int maxPitchStep = 3;
+    const int maxPitchStep = 2;
     int delta = constrain((int)roundf(-filteredTrackDy_ * pitchGain), -maxPitchStep, maxPitchStep);
     if (delta == 0) delta = filteredTrackDy_ > 0.0f ? -1 : 1;
     cameraTargetAngle_ = constrain(cameraTargetAngle_ + delta,
@@ -866,7 +866,7 @@ void MotionCoreAdapter::applyTrackTarget(int dx, int dy, int dz) {
   if (fabsf(filteredTrackDy_) > pitchDeadband &&
       now - lastTrackGimbalUpdateMs_ >= 24U) {
     const float pitchGain = trackProfile_ == 3 ? 0.034f : (trackProfile_ == 1 ? 0.016f : 0.026f);
-    const int maxPitchStep = 3;
+    const int maxPitchStep = 2;
     const int delta = constrain((int)roundf(-filteredTrackDy_ * pitchGain), -maxPitchStep, maxPitchStep);
     cameraTargetAngle_ = constrain(cameraTargetAngle_ + delta,
                                    (float)kCameraMinDeg,
