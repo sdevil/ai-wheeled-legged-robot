@@ -243,6 +243,7 @@ void MotionCoreAdapter::command(const MotionCommand& command) {
       standNudgeUntilMs_ = 0;
       trackHasLockedTarget_ = false;
       trackReturnScanSent_ = false;
+      trackChassisHoldUntilMs_ = 0;
       lastTrackObservationMs_ = 0;
       trackBalanceReadySinceMs_ = 0;
       lastTrackControlUpdateMs_ = 0;
@@ -258,8 +259,8 @@ void MotionCoreAdapter::command(const MotionCommand& command) {
       trackDistanceCandidateDirection_ = 0;
       trackDistanceCandidateFrames_ = 0;
       trackProfile_ = 0;
+      holdTrackingChassis(true);
       enterTrackingState(TrackObservationState::Acquiring);
-      stopMove();
       break;
     case MotionCommandType::TrackStop:
       tracking_ = false;
@@ -673,6 +674,7 @@ void MotionCoreAdapter::applyTrackTarget(int dx, int dy, int dz) {
     return;
   }
 
+  holdTrackingChassis(true);
   const TrackingTuning tuning = trackingTuning(trackProfile_);
   trackYawTarget_ = 0.0f;
   trackYawEngaged_ = false;

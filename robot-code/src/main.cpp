@@ -154,7 +154,6 @@ void dispatchWebAction(WebRobotAction action) {
     case WebRobotAction::TrackMode:
       trace_mode = true;
       sendCameraTrackScan();
-      commandMotion(MotionCommand::simple(MotionCommandType::Stand), "web:action:track_mode:stand", true);
       commandMotion(MotionCommand::simple(MotionCommandType::TrackStart), "web:action:track_mode:start", true);
       break;
     case WebRobotAction::LedTest:
