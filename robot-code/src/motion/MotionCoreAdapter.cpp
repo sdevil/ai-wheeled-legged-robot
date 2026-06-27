@@ -529,6 +529,28 @@ void MotionCoreAdapter::stopMove() {
   axes_[3] = 0.0f;
 }
 
+void MotionCoreAdapter::holdTrackingChassis(bool resetReference) {
+  stopMove();
+  trackYawEngaged_ = false;
+  trackYawReversePending_ = false;
+  trackDistanceEngaged_ = false;
+  trackYawCandidateDirection_ = 0;
+  trackYawCandidateFrames_ = 0;
+  trackDistanceCandidateDirection_ = 0;
+  trackDistanceCandidateFrames_ = 0;
+  ctrl.jump_turn_yaw_rate_cmd = 0.0f;
+  ctrl.jump_linear_vel_cmd = 0.0f;
+  ctrl.jump_linear_direction = 0;
+  ctrl.jump_turn_direction = 0;
+  ctrl.lqi_param.ref.yaw_rate = 0.0f;
+  ctrl.lqi_param.ref.linear_vel = 0.0f;
+  ctrl.lqi_param.integral.yaw_rate_error = 0.0f;
+  ctrl.lqi_param.integral.linear_vel_error = 0.0f;
+  ctrl.balance_idle_hold_active = 0;
+  ctrl.balance_idle_hold_settle_timer = 0;
+  if (resetReference) ctrl.base_components.reset_motion_reference();
+}
+
 void MotionCoreAdapter::updateStandNudge(uint32_t now) {
   if (!standNudgePending_ && standNudgeUntilMs_ == 0) return;
 
@@ -568,31 +590,13 @@ void MotionCoreAdapter::enterTrackingState(TrackObservationState state) {
   trackStateSinceMs_ = millis();
   recordDiagnosticEvent("tracking", String("state=") + trackingStateName());
   if (state == TrackObservationState::Reacquiring) {
-    stopMove();
+    holdTrackingChassis(true);
     searchCameraCenterAngle_ = cameraTargetAngle_;
-    ctrl.lqi_param.ref.yaw_rate = 0.0f;
-    ctrl.lqi_param.integral.yaw_rate_error = 0.0f;
-    trackYawTarget_ = 0.0f;
-    trackDriveTarget_ = 0.0f;
-    trackYawEngaged_ = false;
-    trackYawReversePending_ = false;
-    trackDistanceEngaged_ = false;
-    trackYawCandidateDirection_ = 0;
-    trackYawCandidateFrames_ = 0;
-    trackDistanceCandidateDirection_ = 0;
-    trackDistanceCandidateFrames_ = 0;
   } else if (state == TrackObservationState::Acquiring ||
              state == TrackObservationState::Coasting ||
              state == TrackObservationState::Lost ||
              state == TrackObservationState::Idle) {
-    stopMove();
-    trackYawEngaged_ = false;
-    trackYawReversePending_ = false;
-    trackDistanceEngaged_ = false;
-    trackYawCandidateDirection_ = 0;
-    trackYawCandidateFrames_ = 0;
-    trackDistanceCandidateDirection_ = 0;
-    trackDistanceCandidateFrames_ = 0;
+    holdTrackingChassis(state != TrackObservationState::Idle);
   }
   if ((state == TrackObservationState::Lost ||
        state == TrackObservationState::Idle) && trackHasLockedTarget_) {
@@ -617,13 +621,19 @@ void MotionCoreAdapter::applyTrackObservation(const MotionCommand& command) {
   trackVelocityX_ = command.velocityX;
   trackVelocityY_ = command.velocityY;
   TrackObservationState nextState = command.trackState;
+  const bool hadLockedTarget = trackHasLockedTarget_;
   if (!trackHasLockedTarget_ &&
       (nextState == TrackObservationState::Coasting ||
        nextState == TrackObservationState::Reacquiring)) {
     nextState = TrackObservationState::Acquiring;
   }
   if (nextState == TrackObservationState::Locked) trackHasLockedTarget_ = true;
-  else trackHasLockedTarget_ = false;
+  else {
+    trackHasLockedTarget_ = false;
+    if (hadLockedTarget && nextState != TrackObservationState::Idle) {
+      trackChassisHoldUntilMs_ = millis() + 1200U;
+    }
+  }
   enterTrackingState(nextState);
 
   if (nextState == TrackObservationState::Locked) {
@@ -633,18 +643,11 @@ void MotionCoreAdapter::applyTrackObservation(const MotionCommand& command) {
     // Visual gaps are not reliable target observations. Stop the chassis and
     // hold the gimbal. Brief detector misses are common; snapping the camera
     // back to standby creates a vision-balance feedback loop.
-    trackYawTarget_ = 0.0f;
-    trackDriveTarget_ = 0.0f;
-    axes_[0] = 0.0f;
-    axes_[3] = 0.0f;
-    ctrl.lqi_param.ref.yaw_rate = 0.0f;
-    ctrl.lqi_param.ref.linear_vel = 0.0f;
-    ctrl.lqi_param.integral.yaw_rate_error = 0.0f;
-    ctrl.lqi_param.integral.linear_vel_error = 0.0f;
+    holdTrackingChassis(true);
   } else if (nextState == TrackObservationState::Acquiring ||
              nextState == TrackObservationState::Lost ||
              nextState == TrackObservationState::Idle) {
-    stopMove();
+    holdTrackingChassis(nextState != TrackObservationState::Idle);
   }
 }
 
@@ -877,20 +880,21 @@ void MotionCoreAdapter::applyTrackTarget(int dx, int dy, int dz) {
 }
 void MotionCoreAdapter::updateTrackingMotion(uint32_t now) {
   if (!trackHasLockedTarget_) {
-    trackYawTarget_ = 0.0f;
-    trackYawEngaged_ = false;
-    trackDriveTarget_ = 0.0f;
-    trackDistanceEngaged_ = false;
+    if (trackChassisHoldUntilMs_ != 0 && !deadlineReached(now, trackChassisHoldUntilMs_)) {
+      holdTrackingChassis(false);
+    } else {
+      trackChassisHoldUntilMs_ = 0;
+      trackYawTarget_ = 0.0f;
+      trackYawEngaged_ = false;
+      trackDriveTarget_ = 0.0f;
+      trackDistanceEngaged_ = false;
+    }
     return;
   }
 
   if (ctrl.fsm_state_machine.mode != fsm::mode_state::BALANCE) {
     trackBalanceReadySinceMs_ = 0;
-    trackYawTarget_ = 0.0f;
-    axes_[0] = 0.0f;
-    trackDriveTarget_ = 0.0f;
-    trackDistanceEngaged_ = false;
-    axes_[3] = 0.0f;
+    holdTrackingChassis(false);
     lastTrackMotionUpdateMs_ = now;
     return;
   }
@@ -899,11 +903,7 @@ void MotionCoreAdapter::updateTrackingMotion(uint32_t now) {
     trackBalanceReadySinceMs_ = now;
   }
   if (now - trackBalanceReadySinceMs_ < kTrackBalanceStableMs) {
-    trackYawTarget_ = 0.0f;
-    axes_[0] = 0.0f;
-    trackDriveTarget_ = 0.0f;
-    trackDistanceEngaged_ = false;
-    axes_[3] = 0.0f;
+    holdTrackingChassis(false);
     lastTrackMotionUpdateMs_ = now;
     return;
   }
@@ -918,10 +918,7 @@ void MotionCoreAdapter::updateTrackingMotion(uint32_t now) {
 
   if (trackState_ == TrackObservationState::Reacquiring) {
     const uint32_t elapsed = now - trackStateSinceMs_;
-    trackYawTarget_ = 0.0f;
-    trackDriveTarget_ = 0.0f;
-    trackDistanceEngaged_ = false;
-    axes_[3] = 0.0f;
+    holdTrackingChassis(false);
     cameraTargetAngle_ = kCameraStandbyDeg;
     if (elapsed >= kSearchGiveUpMs) {
       enterTrackingState(TrackObservationState::Lost);
@@ -931,15 +928,7 @@ void MotionCoreAdapter::updateTrackingMotion(uint32_t now) {
   const uint32_t elapsedMs = lastTrackMotionUpdateMs_ == 0 ? 2 : now - lastTrackMotionUpdateMs_;
   lastTrackMotionUpdateMs_ = now;
   const float dt = min(elapsedMs, (uint32_t)50) / 1000.0f;
-  trackYawTarget_ = 0.0f;
-  trackYawEngaged_ = false;
-  axes_[0] = 0.0f;
-  ctrl.jump_turn_yaw_rate_cmd = 0.0f;
-  ctrl.lqi_param.ref.yaw_rate = 0.0f;
-  ctrl.lqi_param.integral.yaw_rate_error = 0.0f;
-  trackDriveTarget_ = 0.0f;
-  trackDistanceEngaged_ = false;
-  axes_[3] = 0.0f;
+  holdTrackingChassis(false);
 }
 
 const char* MotionCoreAdapter::modeName() const {

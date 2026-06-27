@@ -16,6 +16,7 @@ class MotionCoreAdapter final : public MotionCore {
   void pulseButton(uint16_t button, uint32_t durationMs = 80);
   void setMoveAxes(int joyX, int joyY);
   void stopMove();
+  void holdTrackingChassis(bool resetReference = false);
   void applyTrackTarget(int dx, int dy, int dz);
   void applyTrackObservation(const MotionCommand& command);
   void enterTrackingState(TrackObservationState state);
@@ -44,6 +45,7 @@ class MotionCoreAdapter final : public MotionCore {
   uint32_t lastTrackGimbalUpdateMs_ = 0;
   uint32_t lastTrackControlUpdateMs_ = 0;
   uint32_t trackBalanceReadySinceMs_ = 0;
+  uint32_t trackChassisHoldUntilMs_ = 0;
   uint32_t standNudgeBalanceSinceMs_ = 0;
   uint32_t standNudgeUntilMs_ = 0;
   TrackObservationState trackState_ = TrackObservationState::Idle;
