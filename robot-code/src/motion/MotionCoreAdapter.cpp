@@ -9,6 +9,8 @@
 #include "devices/ptk7350.h"
 #include "system/task.h"
 
+extern void sendCameraTrackScan();
+
 namespace {
 constexpr float kTrackYawEngageError = 80.0f;
 constexpr float kTrackYawReleaseError = 38.0f;
@@ -240,6 +242,7 @@ void MotionCoreAdapter::command(const MotionCommand& command) {
       standNudgeBalanceSinceMs_ = 0;
       standNudgeUntilMs_ = 0;
       trackHasLockedTarget_ = false;
+      trackReturnScanSent_ = false;
       lastTrackObservationMs_ = 0;
       trackBalanceReadySinceMs_ = 0;
       lastTrackControlUpdateMs_ = 0;
@@ -262,6 +265,7 @@ void MotionCoreAdapter::command(const MotionCommand& command) {
       tracking_ = false;
       ctrl.symmetric_leg_motion = 0;
       trackHasLockedTarget_ = false;
+      trackReturnScanSent_ = false;
       lastTrackObservationMs_ = 0;
       trackBalanceReadySinceMs_ = 0;
       lastTrackControlUpdateMs_ = 0;
@@ -274,6 +278,7 @@ void MotionCoreAdapter::command(const MotionCommand& command) {
     case MotionCommandType::TrackTarget:
       if (tracking_ && !maintenance_) {
         trackHasLockedTarget_ = true;
+        trackReturnScanSent_ = false;
         enterTrackingState(TrackObservationState::Locked);
         lastTrackObservationMs_ = millis();
         applyTrackTarget(constrain(command.x * 1000 / 320, -1000, 1000),
@@ -627,7 +632,10 @@ void MotionCoreAdapter::applyTrackObservation(const MotionCommand& command) {
        nextState == TrackObservationState::Reacquiring)) {
     nextState = TrackObservationState::Acquiring;
   }
-  if (nextState == TrackObservationState::Locked) trackHasLockedTarget_ = true;
+  if (nextState == TrackObservationState::Locked) {
+    trackHasLockedTarget_ = true;
+    trackReturnScanSent_ = false;
+  }
   else {
     trackHasLockedTarget_ = false;
     if (hadLockedTarget && nextState != TrackObservationState::Idle) {
@@ -883,6 +891,12 @@ void MotionCoreAdapter::updateTrackingMotion(uint32_t now) {
     if (trackChassisHoldUntilMs_ != 0 && !deadlineReached(now, trackChassisHoldUntilMs_)) {
       holdTrackingChassis(false);
     } else {
+      if (trackChassisHoldUntilMs_ != 0 && !trackReturnScanSent_) {
+        sendCameraTrackScan();
+        recordDiagnosticEvent("camera", "track_scan_auto");
+        trackReturnScanSent_ = true;
+        enterTrackingState(TrackObservationState::Acquiring);
+      }
       trackChassisHoldUntilMs_ = 0;
       trackYawTarget_ = 0.0f;
       trackYawEngaged_ = false;
