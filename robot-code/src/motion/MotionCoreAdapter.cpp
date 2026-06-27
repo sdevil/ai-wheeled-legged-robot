@@ -623,6 +623,7 @@ void MotionCoreAdapter::applyTrackObservation(const MotionCommand& command) {
     nextState = TrackObservationState::Acquiring;
   }
   if (nextState == TrackObservationState::Locked) trackHasLockedTarget_ = true;
+  else trackHasLockedTarget_ = false;
   enterTrackingState(nextState);
 
   if (nextState == TrackObservationState::Locked) {
@@ -875,6 +876,14 @@ void MotionCoreAdapter::applyTrackTarget(int dx, int dy, int dz) {
   }
 }
 void MotionCoreAdapter::updateTrackingMotion(uint32_t now) {
+  if (!trackHasLockedTarget_) {
+    trackYawTarget_ = 0.0f;
+    trackYawEngaged_ = false;
+    trackDriveTarget_ = 0.0f;
+    trackDistanceEngaged_ = false;
+    return;
+  }
+
   if (ctrl.fsm_state_machine.mode != fsm::mode_state::BALANCE) {
     trackBalanceReadySinceMs_ = 0;
     trackYawTarget_ = 0.0f;
