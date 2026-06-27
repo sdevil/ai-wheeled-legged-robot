@@ -889,6 +889,9 @@ void MotionCoreAdapter::applyTrackTarget(int dx, int dy, int dz) {
   }
 }
 void MotionCoreAdapter::updateTrackingMotion(uint32_t now) {
+  ctrl.balance_idle_hold_active = 0;
+  ctrl.balance_idle_hold_settle_timer = 0;
+
   if (!trackHasLockedTarget_) {
     if (trackChassisHoldUntilMs_ != 0 && !deadlineReached(now, trackChassisHoldUntilMs_)) {
       holdTrackingChassis(false);
