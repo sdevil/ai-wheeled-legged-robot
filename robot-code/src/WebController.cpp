@@ -27,6 +27,7 @@ extern void sendCameraRuntimeConfig(const String& resolution);
 extern void sendCameraTrackSelection(int x, int y, int width, int height,
                                      int profile = 0);
 extern void sendCameraTrackDistanceAdjust(int value);
+extern void sendCameraTrackScan();
 extern void sendCameraTrackStop();
 
 namespace {
@@ -69,8 +70,8 @@ constexpr char PREF_UI_LANGUAGE[] = "ui_language";
 constexpr char DEFAULT_UI_LANGUAGE[] = "en";
 constexpr char DEFAULT_ROBOT_NAME[] = "WRobot-sdevil";
 constexpr char DEFAULT_CAMERA_RESOLUTION[] = "640x480";
-constexpr char ROBOT_FIRMWARE_VERSION[] = "3.2.84";
-constexpr char ROBOT_FIRMWARE_BUILD[] = "2026-06-25-gimbal-24ms-2deg-01";
+constexpr char ROBOT_FIRMWARE_VERSION[] = "3.2.85";
+constexpr char ROBOT_FIRMWARE_BUILD[] = "2026-06-28-action-source-track-scan-01";
 constexpr char CONTROL_MODE_WIFI[] = "wifi";
 constexpr char CONTROL_MODE_GAMEPAD[] = "gamepad";
 
@@ -320,6 +321,8 @@ void handleDiagnostics() {
   for (int i = 0; i < NUM_LEDS; ++i) {
     statusLeds[i] = getStatusLedColor(i);
   }
+  char motionTrigger[DIAGNOSTIC_TRIGGER_LENGTH] = {};
+  getMotionTrigger(motionTrigger, sizeof(motionTrigger));
 
   String json;
   json.reserve(7000);
@@ -379,6 +382,7 @@ void handleDiagnostics() {
          ",\"yaw_reference\":" + String(motion.yawReferenceRad, 4) +
          ",\"drive_axis\":" + String(motion.driveAxis, 4) +
          ",\"steering_axis\":" + String(motion.steeringAxis, 4) +
+         ",\"trigger\":\"" + jsonEscape(motionTrigger) + "\"" +
          ",\"left_leg_position\":" + String(motion.leftLegPosition) +
          ",\"right_leg_position\":" + String(motion.rightLegPosition) +
          ",\"left_leg_load\":" + String(motion.leftLegLoad) +
@@ -1184,12 +1188,16 @@ void handleWebSocketMessage(const String& message) {
     height = constrain(height, 1, 10000 - y);
     jsonIntValue(message, "profile", profile);
     profile = constrain(profile, 0, 3);
-    if (!queueRobotAction("track_mode")) {
-      sendWebSocketAck("track_roi", requestId, false);
-      return;
-    }
     sendCameraTrackSelection(x, y, width, height, profile);
+    recordDiagnosticEvent("camera", String("track_roi p=") + String(profile));
     sendWebSocketAck("track_roi", requestId, true);
+    return;
+  }
+
+  if (type == "track_unlock" || type == "track_scan") {
+    sendCameraTrackScan();
+    recordDiagnosticEvent("camera", "track_scan");
+    sendWebSocketAck(type.c_str(), requestId, true);
     return;
   }
 
@@ -1433,12 +1441,18 @@ void handleTrackSelection() {
   const int width = constrain(server.arg("w").toInt(), 1, 10000 - x);
   const int height = constrain(server.arg("h").toInt(), 1, 10000 - y);
   const int profile = constrain(server.arg("profile").toInt(), 0, 3);
-  if (!queueRobotAction("track_mode")) {
-    server.send(423, "application/json", "{\"error\":\"tracking unavailable\"}");
+  sendCameraTrackSelection(x, y, width, height, profile);
+  recordDiagnosticEvent("camera", String("track_roi p=") + String(profile));
+  server.send(200, "application/json", "{\"ok\":true}");
+}
+
+void handleTrackUnlock() {
+  if (statusMaintenanceMode || statusOtaInProgress) {
+    server.send(423, "application/json", "{\"error\":\"robot locked\"}");
     return;
   }
-
-  sendCameraTrackSelection(x, y, width, height, profile);
+  sendCameraTrackScan();
+  recordDiagnosticEvent("camera", "track_scan");
   server.send(200, "application/json", "{\"ok\":true}");
 }
 
@@ -1630,6 +1644,7 @@ void webServerTask(void *) {
   server.on("/api/legs/height_value", HTTP_POST, handleLegHeightValue);
   server.on("/api/legs/lean", HTTP_POST, handleLegLean);
   server.on("/api/camera/track", HTTP_POST, handleTrackSelection);
+  server.on("/api/camera/track_unlock", HTTP_POST, handleTrackUnlock);
   server.on("/api/camera/track_distance", HTTP_POST, handleTrackDistanceAdjust);
   server.on("/api/action", HTTP_POST, handleAction);
   server.on("/api/ota/rollback", HTTP_POST, handleRollback);

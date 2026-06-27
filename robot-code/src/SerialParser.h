@@ -17,6 +17,7 @@ void sendCameraRuntimeConfig(const String& resolution);
 void sendCameraTrackSelection(int x, int y, int width, int height,
                               int profile = 0);
 void sendCameraTrackDistanceAdjust(int value);
+void sendCameraTrackScan();
 void sendCameraTrackStop();
 String percentEncodeForCamera(const String& input);
 

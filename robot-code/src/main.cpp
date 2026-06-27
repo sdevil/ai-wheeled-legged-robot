@@ -46,6 +46,41 @@ bool recoveryButtonHeldAtBoot() {
   }
   return lowSamples == 12;
 }
+
+const char* webActionName(WebRobotAction action) {
+  switch (action) {
+    case WebRobotAction::Stand: return "stand";
+    case WebRobotAction::Sit: return "sit";
+    case WebRobotAction::ResetPose: return "reset";
+    case WebRobotAction::CancelKick: return "cancel";
+    case WebRobotAction::TrackMode: return "track_mode";
+    case WebRobotAction::LedTest: return "led_test";
+    case WebRobotAction::Jump: return "jump_place";
+    case WebRobotAction::JumpForward: return "jump_forward";
+    case WebRobotAction::JumpBackward: return "jump_backward";
+    case WebRobotAction::JumpLeft: return "jump_left";
+    case WebRobotAction::JumpRight: return "jump_right";
+    case WebRobotAction::EnterMaintenance: return "maintenance_enter";
+    case WebRobotAction::ExitMaintenance: return "maintenance_exit";
+    case WebRobotAction::None:
+    default:
+      return "none";
+  }
+}
+
+void commandMotion(const MotionCommand& command, const char* trigger,
+                   bool event = false) {
+  setMotionTrigger(trigger);
+  if (event) recordDiagnosticEvent("motion", trigger);
+  motionCore().command(command);
+}
+
+void commandMotion(const MotionCommand& command, const String& trigger,
+                   bool event = false) {
+  setMotionTrigger(trigger);
+  if (event) recordDiagnosticEvent("motion", trigger);
+  motionCore().command(command);
+}
 #if ENABLE_GAMEPAD_BLE
 // Match the 5% dead zone used by the shared motion core so Web and gamepad axes
 // enter the same response curve.
@@ -98,54 +133,56 @@ void dispatchWebAction(WebRobotAction action) {
   if (action != WebRobotAction::None) {
     recordDiagnosticEvent("action", String("id=") + String((int)action));
   }
+  const String trigger = String("web:action:") + webActionName(action);
   switch (action) {
     case WebRobotAction::Stand:
-      motionCore().command(MotionCommand::simple(MotionCommandType::Stand));
+      commandMotion(MotionCommand::simple(MotionCommandType::Stand), trigger, true);
       break;
     case WebRobotAction::Sit:
       trace_mode = false;
       sendCameraTrackStop();
-      motionCore().command(MotionCommand::simple(MotionCommandType::Sit));
+      commandMotion(MotionCommand::simple(MotionCommandType::Sit), trigger, true);
       break;
     case WebRobotAction::ResetPose:
-      motionCore().command(MotionCommand::simple(MotionCommandType::ResetPose));
+      commandMotion(MotionCommand::simple(MotionCommandType::ResetPose), trigger, true);
       break;
     case WebRobotAction::CancelKick:
       trace_mode = false;
       sendCameraTrackStop();
-      motionCore().command(MotionCommand::simple(MotionCommandType::TrackStop));
+      commandMotion(MotionCommand::simple(MotionCommandType::TrackStop), trigger, true);
       break;
     case WebRobotAction::TrackMode:
       trace_mode = true;
-      motionCore().command(MotionCommand::simple(MotionCommandType::Stand));
-      motionCore().command(MotionCommand::simple(MotionCommandType::TrackStart));
+      sendCameraTrackScan();
+      commandMotion(MotionCommand::simple(MotionCommandType::Stand), "web:action:track_mode:stand", true);
+      commandMotion(MotionCommand::simple(MotionCommandType::TrackStart), "web:action:track_mode:start", true);
       break;
     case WebRobotAction::LedTest:
       startColorSequenceBlink();
       break;
     case WebRobotAction::Jump:
-      motionCore().command(MotionCommand::simple(MotionCommandType::JumpPlace));
+      commandMotion(MotionCommand::simple(MotionCommandType::JumpPlace), trigger, true);
       break;
     case WebRobotAction::JumpForward:
-      motionCore().command(MotionCommand::simple(MotionCommandType::JumpForward));
+      commandMotion(MotionCommand::simple(MotionCommandType::JumpForward), trigger, true);
       break;
     case WebRobotAction::JumpBackward:
-      motionCore().command(MotionCommand::simple(MotionCommandType::JumpBackward));
+      commandMotion(MotionCommand::simple(MotionCommandType::JumpBackward), trigger, true);
       break;
     case WebRobotAction::JumpLeft:
-      motionCore().command(MotionCommand::simple(MotionCommandType::JumpLeft));
+      commandMotion(MotionCommand::simple(MotionCommandType::JumpLeft), trigger, true);
       break;
     case WebRobotAction::JumpRight:
-      motionCore().command(MotionCommand::simple(MotionCommandType::JumpRight));
+      commandMotion(MotionCommand::simple(MotionCommandType::JumpRight), trigger, true);
       break;
     case WebRobotAction::EnterMaintenance:
       trace_mode = false;
       sendCameraTrackStop();
-      motionCore().command(MotionCommand::simple(MotionCommandType::Sit));
-      motionCore().command(MotionCommand::simple(MotionCommandType::MaintenanceEnter));
+      commandMotion(MotionCommand::simple(MotionCommandType::Sit), "web:action:maintenance_enter:sit", true);
+      commandMotion(MotionCommand::simple(MotionCommandType::MaintenanceEnter), trigger, true);
       break;
     case WebRobotAction::ExitMaintenance:
-      motionCore().command(MotionCommand::simple(MotionCommandType::MaintenanceExit));
+      commandMotion(MotionCommand::simple(MotionCommandType::MaintenanceExit), trigger, true);
       break;
     case WebRobotAction::None:
       break;
@@ -160,22 +197,25 @@ void processWebControl() {
   dispatchWebAction(consumeWebRobotAction());
   int legHeightPercent = -1;
   if (consumeWebLegHeightPercent(legHeightPercent)) {
-    motionCore().command(MotionCommand::legHeightPercent(legHeightPercent));
+    commandMotion(MotionCommand::legHeightPercent(legHeightPercent),
+                  String("web:leg_height_value:") + legHeightPercent);
   }
   int legHeightDirection = 0;
   if (consumeWebLegHeightDirection(legHeightDirection)) {
-    motionCore().command(MotionCommand::legHeight(legHeightDirection));
+    commandMotion(MotionCommand::legHeight(legHeightDirection),
+                  String("web:leg_height:") + legHeightDirection);
   }
   int legLeanPercent = 0;
   if (consumeWebLegLeanPercent(legLeanPercent)) {
-    motionCore().command(MotionCommand::legLean(legLeanPercent));
+    commandMotion(MotionCommand::legLean(legLeanPercent),
+                  String("web:leg_lean:") + legLeanPercent);
   }
   const int cameraPitchDelta = consumeWebCameraPitchDelta();
   if (cameraPitchDelta != 0) {
     MotionCommand cameraCommand;
     cameraCommand.type = MotionCommandType::CameraGimbal;
     cameraCommand.y = cameraPitchDelta;
-    motionCore().command(cameraCommand);
+    commandMotion(cameraCommand, String("web:gimbal_pitch:") + cameraPitchDelta);
   }
 
   int joyX = 0;
@@ -196,16 +236,19 @@ void processWebControl() {
         lastNonZeroWebJoyY = 0;
       }
     }
-    motionCore().command(MotionCommand::move(joyX, joyY));
+    commandMotion(MotionCommand::move(joyX, joyY),
+                  String("web:drive:x=") + joyX + ",y=" + joyY);
     wasDriving = true;
   } else if (!gamepad_enabled && getWebGimbalYawCommand(joyX)) {
-    motionCore().command(MotionCommand::move(joyX, 0));
+    commandMotion(MotionCommand::move(joyX, 0),
+                  String("web:gimbal_yaw:") + joyX);
     wasDriving = true;
   } else if (wasDriving) {
     lastNonZeroWebJoyX = 0;
     lastNonZeroWebJoyY = 0;
     webZeroSinceMs = 0;
-    motionCore().command(MotionCommand::simple(MotionCommandType::Stop));
+    commandMotion(MotionCommand::simple(MotionCommandType::Stop),
+                  "web:drive:stop");
     wasDriving = false;
   }
 }
@@ -258,16 +301,18 @@ void processControllerData(const GamepadControllerNotificationParser& data) {
   static unsigned long lastGimbalCommandMs = 0;
 
   if (data.btnRB && !previousRb) {
-    motionCore().command(MotionCommand::simple(MotionCommandType::Stand));
+    commandMotion(MotionCommand::simple(MotionCommandType::Stand),
+                  "gamepad:button:stand", true);
   }
   if (data.btnLB && !previousLb) {
-    motionCore().command(MotionCommand::simple(MotionCommandType::Sit));
+    commandMotion(MotionCommand::simple(MotionCommandType::Sit),
+                  "gamepad:button:sit", true);
   }
-  if (data.btnRS && !previousRs) motionCore().command(MotionCommand::simple(MotionCommandType::JumpPlace));
-  if (data.btnY && !previousY) motionCore().command(MotionCommand::simple(MotionCommandType::JumpForward));
-  if (data.btnA && !previousA) motionCore().command(MotionCommand::simple(MotionCommandType::JumpBackward));
-  if (data.btnX && !previousX) motionCore().command(MotionCommand::simple(MotionCommandType::JumpLeft));
-  if (data.btnB && !previousB) motionCore().command(MotionCommand::simple(MotionCommandType::JumpRight));
+  if (data.btnRS && !previousRs) commandMotion(MotionCommand::simple(MotionCommandType::JumpPlace), "gamepad:button:jump_place", true);
+  if (data.btnY && !previousY) commandMotion(MotionCommand::simple(MotionCommandType::JumpForward), "gamepad:button:jump_forward", true);
+  if (data.btnA && !previousA) commandMotion(MotionCommand::simple(MotionCommandType::JumpBackward), "gamepad:button:jump_backward", true);
+  if (data.btnX && !previousX) commandMotion(MotionCommand::simple(MotionCommandType::JumpLeft), "gamepad:button:jump_left", true);
+  if (data.btnB && !previousB) commandMotion(MotionCommand::simple(MotionCommandType::JumpRight), "gamepad:button:jump_right", true);
 
   previousRb = data.btnRB;
   previousLb = data.btnLB;
@@ -277,10 +322,12 @@ void processControllerData(const GamepadControllerNotificationParser& data) {
   previousX = data.btnX;
   previousB = data.btnB;
 
-  motionCore().command(MotionCommand::legLean(
-      data.btnDirLeft ? -100 : (data.btnDirRight ? 100 : 0)));
-  motionCore().command(MotionCommand::legHeight(
-      data.btnDirUp ? 1 : (data.btnDirDown ? -1 : 0)));
+  commandMotion(MotionCommand::legLean(
+                    data.btnDirLeft ? -100 : (data.btnDirRight ? 100 : 0)),
+                "gamepad:dpad:lean");
+  commandMotion(MotionCommand::legHeight(
+                    data.btnDirUp ? 1 : (data.btnDirDown ? -1 : 0)),
+                "gamepad:dpad:height");
 
   int joyX = axisToPercent(data.joyLHori);
   int joyY = axisToPercent(data.joyLVert, true);
@@ -288,7 +335,8 @@ void processControllerData(const GamepadControllerNotificationParser& data) {
 
   const int gimbalYaw = axisToPercent(data.joyRHori);
   if (gimbalYaw != 0) joyX = gimbalYaw;
-  motionCore().command(MotionCommand::move(joyX, joyY));
+  commandMotion(MotionCommand::move(joyX, joyY),
+                String("gamepad:move:x=") + joyX + ",y=" + joyY);
 
   const unsigned long now = millis();
   const int gimbalPitch = axisToPercent(data.joyRVert, true);
@@ -297,15 +345,16 @@ void processControllerData(const GamepadControllerNotificationParser& data) {
     command.type = MotionCommandType::CameraGimbal;
     const int direction = gimbalPitch > 0 ? 1 : -1;
     command.y = direction * constrain((abs(gimbalPitch) + 32) / 33, 1, 3);
-    motionCore().command(command);
+    commandMotion(command, String("gamepad:gimbal_pitch:") + command.y);
     lastGimbalCommandMs = now;
   }
 }
 
 void stopControllerMotion() {
-  motionCore().command(MotionCommand::simple(MotionCommandType::Stop));
-  motionCore().command(MotionCommand::legLean(0));
-  motionCore().command(MotionCommand::legHeight(0));
+  commandMotion(MotionCommand::simple(MotionCommandType::Stop),
+                "gamepad:disconnect:stop", true);
+  commandMotion(MotionCommand::legLean(0), "gamepad:disconnect:lean_zero");
+  commandMotion(MotionCommand::legHeight(0), "gamepad:disconnect:height_zero");
 }
 #endif
 
@@ -381,8 +430,10 @@ void loop() {
   }
 
   if (otaRunning && !otaMotionLocked) {
-    motionCore().command(MotionCommand::simple(MotionCommandType::MaintenanceEnter));
-    motionCore().command(MotionCommand::simple(MotionCommandType::Stop));
+    commandMotion(MotionCommand::simple(MotionCommandType::MaintenanceEnter),
+                  "ota:maintenance_enter", true);
+    commandMotion(MotionCommand::simple(MotionCommandType::Stop),
+                  "ota:stop", true);
     otaMotionLocked = true;
   } else if (!otaRunning) {
     otaMotionLocked = false;

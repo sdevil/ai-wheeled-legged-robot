@@ -540,6 +540,21 @@ def _semantic_display_label(family, label):
     return "target"
 
 
+def _scan_label(candidates):
+    if not candidates:
+        return "TARGET_SCAN", 0
+    best = max(candidates, key=lambda item: item.score)
+    if best.family == "face":
+        return "FACE_VISIBLE", len(candidates)
+    if best.family == "animal":
+        return f"ANIMAL_{best.label.upper()}", len(candidates)
+    if best.family == "ball":
+        return "PING_PONG_BALL", len(candidates)
+    if best.family == "person":
+        return "PERSON_VISIBLE", len(candidates)
+    return "TARGET_VISIBLE", len(candidates)
+
+
 def _tracking_profile(family):
     if family == "ball":
         return 3
@@ -641,6 +656,7 @@ def run_object_tracking(resources):
 
     pending_command = None
     tracking = False
+    scan_mode = False
     ever_locked = False
     state = IDLE
     target_height = 0
@@ -661,6 +677,7 @@ def run_object_tracking(resources):
     frame_count = 0
     last_label = ""
     last_count = -1
+    scan_candidates = []
 
     def receive_track_command(command):
         nonlocal pending_command
@@ -690,6 +707,8 @@ def run_object_tracking(resources):
             command = pending_command
             pending_command = None
             if command.startswith("TRACKSTOP"):
+                scan_mode = False
+                scan_candidates = []
                 tracking, state, target_height = False, IDLE, 0
                 ever_locked = False
                 target_distance_locked = False
@@ -703,8 +722,26 @@ def run_object_tracking(resources):
                 semantic_valid_until_ms = 0
                 velocity_x, velocity_y = 0.0, 0.0
                 report_camera_detection(serial_dev, "NO_TARGET", 0)
+            elif command.startswith("TRACKSCAN"):
+                scan_mode = True
+                scan_candidates = []
+                tracking, state, target_height = False, IDLE, 0
+                ever_locked = False
+                target_distance_locked = False
+                distance_baseline_frames = 0
+                missed_frames, stable_frames, lost_since_ms = 0, 0, 0
+                filtered_box = None
+                target_family, target_label = "", ""
+                requested_profile = 0
+                classify_frames = 0
+                semantic_miss_frames = 0
+                semantic_valid_until_ms = 0
+                velocity_x, velocity_y = 0.0, 0.0
+                report_camera_detection(serial_dev, "TARGET_SCAN", 0)
             elif command.startswith("TRACKROI:"):
                 try:
+                    scan_mode = False
+                    scan_candidates = []
                     requested_profile = max(
                         0, min(3, int(_parse_values(command).get("p", "0")))
                     )
@@ -744,6 +781,8 @@ def run_object_tracking(resources):
                     report_camera_detection(serial_dev, _semantic_label(target_family, target_label, LOCKED), 1)
                     print(f"[WROBOT] target locked from selection: x={x}, y={y}, w={w}, h={h}, target_h={target_height}, family={target_family}")
                 except Exception as exc:
+                    scan_mode = True
+                    scan_candidates = []
                     tracking, state, filtered_box = False, IDLE, None
                     ever_locked = False
                     target_family, target_label = "", ""
@@ -769,8 +808,26 @@ def run_object_tracking(resources):
 
         score = 0.0
         active_profile = requested_profile or _tracking_profile(target_family)
-        movement_command = _command(state, profile=active_profile)
+        movement_command = None
         detection_label, detection_count = "NO_TARGET", 0
+
+        if scan_mode and not tracking:
+            if hybrid_detector and hybrid_detector.ready() and frame_count % max(1, HYBRID_DETECT_EVERY_N_FRAMES) == 0:
+                try:
+                    scan_candidates = hybrid_detector._collect_candidates(img, "")
+                except Exception as exc:
+                    print(f"[WROBOT] scan detect failed: {exc}")
+                    scan_candidates = []
+            for item in scan_candidates[:8]:
+                x, y, w, h = [int(value) for value in item.box]
+                color = image.COLOR_BLUE if item.family != "face" else image.COLOR_GREEN
+                img.draw_rect(x, y, w, h, color, 2)
+                img.draw_string(
+                    x, max(2, y - 16),
+                    f"{_semantic_display_label(item.family, item.label)} {item.score:.2f}",
+                    color,
+                )
+            detection_label, detection_count = _scan_label(scan_candidates)
 
         if tracking:
             semantic_identity_required = bool(target_family)
@@ -1007,7 +1064,8 @@ def run_object_tracking(resources):
             report_camera_detection(serial_dev, detection_label, detection_count)
             last_label, last_count = detection_label, detection_count
 
-        serial_dev.write_str(movement_command)
+        if movement_command:
+            serial_dev.write_str(movement_command)
         if new_ip:
             if preview_server and preview_server.is_ready():
                 report_camera_status(serial_dev, "CONNECTED", new_ip, "Camera WiFi connected")

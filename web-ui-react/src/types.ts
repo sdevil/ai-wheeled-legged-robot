@@ -52,6 +52,7 @@ export interface DashboardModel {
   fps: number;
   latencyMs: number;
   aiMode: string;
+  targetLabelRaw: string;
   targetLabel: string;
   speedMps: number;
   pitch: number;

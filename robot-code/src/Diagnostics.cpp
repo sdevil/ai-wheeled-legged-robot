@@ -6,6 +6,7 @@ namespace {
 DiagnosticEvent events[DIAGNOSTIC_EVENT_CAPACITY];
 size_t writeIndex = 0;
 size_t eventCount = 0;
+char currentMotionTrigger[DIAGNOSTIC_TRIGGER_LENGTH] = "boot";
 portMUX_TYPE diagnosticsMux = portMUX_INITIALIZER_UNLOCKED;
 }
 
@@ -42,3 +43,20 @@ size_t copyDiagnosticEvents(DiagnosticEvent* output, size_t capacity) {
   return count;
 }
 
+void setMotionTrigger(const char* trigger) {
+  portENTER_CRITICAL(&diagnosticsMux);
+  strlcpy(currentMotionTrigger, trigger ? trigger : "",
+          sizeof(currentMotionTrigger));
+  portEXIT_CRITICAL(&diagnosticsMux);
+}
+
+void setMotionTrigger(const String& trigger) {
+  setMotionTrigger(trigger.c_str());
+}
+
+void getMotionTrigger(char* output, size_t capacity) {
+  if (!output || capacity == 0) return;
+  portENTER_CRITICAL(&diagnosticsMux);
+  strlcpy(output, currentMotionTrigger, capacity);
+  portEXIT_CRITICAL(&diagnosticsMux);
+}

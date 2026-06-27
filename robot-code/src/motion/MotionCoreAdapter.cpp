@@ -204,7 +204,7 @@ void MotionCoreAdapter::command(const MotionCommand& command) {
       frontier_servo.set_angle(0);
       break;
     case MotionCommandType::Move:
-      if (!maintenance_ && !tracking_) {
+      if (!maintenance_ && (!tracking_ || !trackHasLockedTarget_)) {
         standNudgePending_ = false;
         standNudgeBalanceSinceMs_ = 0;
         standNudgeUntilMs_ = 0;

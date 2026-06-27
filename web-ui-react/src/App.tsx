@@ -69,7 +69,7 @@ const copyByLanguage = {
   en: {
     gamepadMac: 'Gamepad MAC address',
     diagnostics: 'Diagnostics', liveDiagnostics: 'Live diagnostics', refreshDiagnostics: 'Refresh', copyDiagnostics: 'Copy', diagnosticsCopied: 'Copied', diagnosticsCopyFailed: 'Copy failed',
-    online: 'Online', offline: 'Offline', idle: 'Idle', standby: 'Standby', active: 'Active', sitting: 'Sitting', noTarget: 'No Target', selectTarget: 'Drag a box around the target',
+    online: 'Online', offline: 'Offline', idle: 'Idle', standby: 'Standby', active: 'Active', sitting: 'Sitting', noTarget: 'No Target', selectTarget: 'Tap a detected target to lock; tap again to unlock',
     moveControl: 'Drive Control', moveSpeed: 'Drive Speed', gimbalControl: 'Gimbal Control', gimbalSpeed: 'Gimbal Speed', legHeight: 'Leg Height', extendLegs: 'Extend legs', retractLegs: 'Retract legs', bodyLean: 'Body Lean', leanLeft: 'Lean left', leanRight: 'Lean right',
     robotStatus: 'Robot Status', oledPreview: 'OLED Face Preview', commonActions: 'Actions', settings: 'Settings', device: 'Device', network: 'Network', camera: 'Camera', maintenance: 'Advanced Maintenance',
     robot: 'Robot', detection: 'Target', attitude: 'Attitude', net: 'Network', battery: 'Battery', boardIp: 'Board IP', cameraStatus: 'Camera Status',
@@ -83,7 +83,7 @@ const copyByLanguage = {
   zh: {
     gamepadMac: '手柄 MAC 地址',
     diagnostics: '诊断', liveDiagnostics: '实时诊断', refreshDiagnostics: '刷新', copyDiagnostics: '复制', diagnosticsCopied: '已复制', diagnosticsCopyFailed: '复制失败',
-    online: '在线', offline: '离线', idle: '空闲', standby: '待命', active: '运行中', sitting: '坐下', noTarget: '无目标', selectTarget: '拖动框选要追踪的目标',
+    online: '在线', offline: '离线', idle: '空闲', standby: '待命', active: '运行中', sitting: '坐下', noTarget: '无目标', selectTarget: '点击识别目标锁定，再次点击解锁',
     moveControl: '移动控制', moveSpeed: '移动速度', gimbalControl: '云台控制', gimbalSpeed: '云台速度', legHeight: '腿部高度', extendLegs: '伸腿', retractLegs: '缩腿', bodyLean: '左右侧身', leanLeft: '向左侧身', leanRight: '向右侧身',
     robotStatus: '机器人状态', oledPreview: '表情屏预览', commonActions: '模式与动作', settings: '设置', device: '设备', network: '网络', camera: '相机', maintenance: '高级维护',
     robot: '机器人', detection: '识别', attitude: '姿态', net: '网络', battery: '电量', boardIp: '主板 IP', cameraStatus: '相机状态',
@@ -106,6 +106,10 @@ function targetStatusLabel(label: string, language: UiLanguage) {
   if (language === 'en') return label;
   const labels: Record<string, string> = {
     'No Target': '无目标',
+    'Target Scan': '正在识别目标',
+    'Target Visible': '发现目标',
+    'Face Visible': '发现人脸',
+    'Person Visible': '发现人物',
     'Track Classifying': '识别目标中',
     'Track Acquiring': '正在确认目标',
     'Target Locked': '目标已锁定',
@@ -128,6 +132,10 @@ function targetStatusLabel(label: string, language: UiLanguage) {
     'Animal Giraffe': '动物：长颈鹿',
   };
   return labels[label] || label;
+}
+
+function isTargetLocked(rawLabel: string) {
+  return /_LOCKED$|^LOCKED$/i.test(rawLabel || '');
 }
 
 function resolveInitialHost() {
@@ -236,6 +244,7 @@ const initialTelemetry: DashboardModel = {
   fps: 0,
   latencyMs: 0,
   aiMode: 'Standby',
+  targetLabelRaw: 'NO_TARGET',
   targetLabel: 'No Target',
   speedMps: 0,
   pitch: 0,
@@ -653,9 +662,11 @@ export default function App() {
                 selectTargetLabel={copy.selectTarget}
                 targetProfile={trackingTargetProfile}
                 onTargetProfileChange={setTrackingTargetProfile}
+                targetLocked={isTargetLocked(telemetry.targetLabelRaw)}
                 onTrackSelection={(selection) =>
                   void api.sendTrackSelection(selection, trackingTargetProfile)
                 }
+                onTrackUnlock={() => void api.sendTrackUnlock()}
               />
             </Box>
 
@@ -678,18 +689,10 @@ export default function App() {
                   onSpeedChange={setDriveSpeed}
                   onMove={(x, y) => {
                     setDriveControlActive(true);
-                    if (telemetry.activeMode === 'track_mode') {
-                      api.sendTrackDistanceAdjust(y * driveSpeed);
-                      return;
-                    }
                     void api.sendDrive(x, y, driveSpeed);
                   }}
                   onEnd={() => {
                     setDriveControlActive(false);
-                    if (telemetry.activeMode === 'track_mode') {
-                      api.sendTrackDistanceAdjust(0);
-                      return;
-                    }
                     void api.sendDrive(0, 0, driveSpeed);
                   }}
                   beforeFooter={
@@ -1190,7 +1193,9 @@ function CameraCard({
   selectTargetLabel,
   targetProfile,
   onTargetProfileChange,
+  targetLocked,
   onTrackSelection,
+  onTrackUnlock,
 }: {
   telemetry: DashboardModel;
   cameraUrl: string;
@@ -1199,7 +1204,9 @@ function CameraCard({
   selectTargetLabel: string;
   targetProfile: number;
   onTargetProfileChange: (profile: number) => void;
+  targetLocked: boolean;
   onTrackSelection: (selection: TrackSelection) => void;
+  onTrackUnlock: () => void;
 }) {
   const { streamUrl, snapshotUrl } = useMemo(
     () => normalizeCameraUrls(cameraUrl),
@@ -1321,6 +1328,12 @@ function CameraCard({
 
   function finishSelection(endPoint: SelectionPoint | null) {
     if (!selectionStart || !endPoint) {
+      setSelectionStart(null);
+      setSelectionEnd(null);
+      return;
+    }
+    if (targetLocked) {
+      onTrackUnlock();
       setSelectionStart(null);
       setSelectionEnd(null);
       return;

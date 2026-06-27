@@ -25,6 +25,7 @@ const mockModel = (host: string): DashboardModel => ({
   fps: 0,
   latencyMs: 0,
   aiMode: 'Standby',
+  targetLabelRaw: 'NO_TARGET',
   targetLabel: 'No Target',
   speedMps: 0,
   pitch: 0,
@@ -146,6 +147,7 @@ export class RobotApi {
         fps: 0,
         latencyMs: 0,
         aiMode: data.active_mode === 'track_mode' ? 'Track' : data.enabled ? 'Active' : 'Standby',
+        targetLabelRaw: data.camera_detect_label || 'NO_TARGET',
         targetLabel: data.camera_detect_label === 'NO_TARGET'
           ? 'No Target'
           : `${formatDetectionLabel(data.camera_detect_label)}${data.camera_detect_count > 1 ? ` x${data.camera_detect_count}` : ''}`,
@@ -534,6 +536,16 @@ export class RobotApi {
         w: String(selection.w), h: String(selection.h),
         profile: String(profile),
       })).ok;
+    } catch {
+      return false;
+    }
+  }
+
+  async sendTrackUnlock() {
+    const ack = this.sendSocketRequest({ type: 'track_unlock' });
+    if (ack) return ack;
+    try {
+      return (await this.post('/api/camera/track_unlock', {})).ok;
     } catch {
       return false;
     }

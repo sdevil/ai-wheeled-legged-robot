@@ -232,6 +232,7 @@ def handle_incoming_camera_commands(
         if (
             command.startswith("TRACKROI:")
             or command.startswith("TRACKDIST:")
+            or command == "TRACKSCAN"
             or command == "TRACKSTOP"
         ):
             if track_command_handler:

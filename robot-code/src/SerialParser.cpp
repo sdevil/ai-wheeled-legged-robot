@@ -1,5 +1,6 @@
 #include "SerialParser.h"
 
+#include "Diagnostics.h"
 #include "PreferencesManager.h"
 #include "WebController.h"
 #include "motion/MotionCoreAdapter.h"
@@ -13,6 +14,19 @@ String trimToken(const char* value) {
   String result = String(value ? value : "");
   result.trim();
   return result;
+}
+
+const char* trackingStateText(TrackObservationState state) {
+  switch (state) {
+    case TrackObservationState::Acquiring: return "acquiring";
+    case TrackObservationState::Locked: return "locked";
+    case TrackObservationState::Coasting: return "coasting";
+    case TrackObservationState::Reacquiring: return "reacquiring";
+    case TrackObservationState::Lost: return "lost";
+    case TrackObservationState::Idle:
+    default:
+      return "idle";
+  }
 }
 }  // namespace
 
@@ -59,10 +73,13 @@ void parseSetRobotMode(char* cmd) {
   if (modeText == nullptr) return;
   const int mode = atoi(modeText + 5);
   if (mode == 11) {
+    setMotionTrigger("serial:mode:stand");
     motionCore().command(MotionCommand::simple(MotionCommandType::Stand));
   } else if (mode == 10) {
+    setMotionTrigger("serial:mode:sit");
     motionCore().command(MotionCommand::simple(MotionCommandType::Sit));
   } else if (mode == 12) {
+    setMotionTrigger("serial:mode:reset");
     motionCore().command(MotionCommand::simple(MotionCommandType::ResetPose));
   }
 }
@@ -76,6 +93,7 @@ void parseServoAngleCommand(char* cmd) {
   command.type = MotionCommandType::CameraGimbal;
   command.x = atoi(s1 + 3);
   command.y = atoi(s2 + 3) - 105;
+  setMotionTrigger("serial:gimbal");
   motionCore().command(command);
 }
 
@@ -88,6 +106,7 @@ void parseCameraDeviationCommand(char* cmd) {
   const int dx = atoi(dxPtr + 3);
   const int dy = atoi(dyPtr + 3);
   const int dz = dzPtr != nullptr ? atoi(dzPtr + 3) : 9999;
+  setMotionTrigger("camera:legacy_dxdy");
   motionCore().command(MotionCommand::trackTarget(dx, dy, dz));
 }
 
@@ -160,6 +179,7 @@ void parseTrackingObservationCommand(char* cmd) {
   observation.rawScore = rawScorePtr != nullptr ? atoi(rawScorePtr + 3) : confidence;
   observation.velocityX = velocityXPtr != nullptr ? atoi(velocityXPtr + 3) : 0;
   observation.velocityY = velocityYPtr != nullptr ? atoi(velocityYPtr + 3) : 0;
+  setMotionTrigger(String("camera:track:") + trackingStateText(state));
   motionCore().command(observation);
 }
 void parseCameraStatusCommand(char* cmd) {
@@ -273,6 +293,11 @@ void sendCameraTrackSelection(int x, int y, int width, int height,
 
 void sendCameraTrackDistanceAdjust(int value) {
   Serial.println("TRACKDIST:v=" + String(constrain(value, -100, 100)) + ";");
+}
+
+void sendCameraTrackScan() {
+  Serial.println("TRACKSCAN;");
+  updateWebCameraDetectionStatus("TARGET_SCAN", 0);
 }
 
 void sendCameraTrackStop() {
