@@ -335,9 +335,8 @@ void controller::sit_loop(uint32_t tick)
                 enable_motor = 0;
                 left_motor.move(0.0f);
                 right_motor.move(0.0f);
-                sts3032.set(SERVO_LEFT, SERVO_LEFT_MIN, 300, 40);
-                sts3032.set(SERVO_RIGHT, SERVO_RIGHT_MIN, 300, 40);
-                sts3032.move();
+                sts3032.set_torque_switch(SERVO_LEFT, 2);
+                sts3032.set_torque_switch(SERVO_RIGHT, 2);
                 sts3032.set_torque_switch(SERVO_LEFT, 2);
                 sts3032.set_torque_switch(SERVO_RIGHT, 2);
                 fsm_state_machine.sit = fsm::sit_state::DONE;
@@ -353,14 +352,10 @@ void controller::sit_loop(uint32_t tick)
 
             if(buttons & BTN_RB)
             {
-                sts3032.set(SERVO_LEFT, SERVO_LEFT_MIN, 260, 30);
-                sts3032.set(SERVO_RIGHT, SERVO_RIGHT_MIN, 260, 30);
-                sts3032.move();
                 sts3032.set_torque_switch(SERVO_LEFT, 1);
                 sts3032.set_torque_switch(SERVO_RIGHT, 1);
-                sts3032.set(SERVO_LEFT, SERVO_LEFT_MIN, 360, 80);
-                sts3032.set(SERVO_RIGHT, SERVO_RIGHT_MIN, 360, 80);
-                sts3032.move();
+                sts3032.set_torque_switch(SERVO_LEFT, 1);
+                sts3032.set_torque_switch(SERVO_RIGHT, 1);
                 sit_timer = 0;
                 base_components.reset();
                 begin_balance_recover();
