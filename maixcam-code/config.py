@@ -64,7 +64,7 @@ def _load_app_version():
 
 
 APP_VERSION = _load_app_version()
-BUILD_ID = "2026-06-28-scan-ack-overlay-01"
+BUILD_ID = "2026-06-28-camera-status-heartbeat-01"
 
 WIFI_AUTO_CONNECT = True
 FORCE_ROBOT_AP_MODE = False

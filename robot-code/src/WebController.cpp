@@ -71,8 +71,9 @@ constexpr char PREF_UI_LANGUAGE[] = "ui_language";
 constexpr char DEFAULT_UI_LANGUAGE[] = "en";
 constexpr char DEFAULT_ROBOT_NAME[] = "WRobot-sdevil";
 constexpr char DEFAULT_CAMERA_RESOLUTION[] = "640x480";
-constexpr char ROBOT_FIRMWARE_VERSION[] = "3.2.99";
-constexpr char ROBOT_FIRMWARE_BUILD[] = "2026-06-28-camera-gimbal-track-01";
+constexpr char ROBOT_FIRMWARE_VERSION[] = "3.2.100";
+constexpr char ROBOT_FIRMWARE_BUILD[] = "2026-06-28-camera-status-stale-01";
+constexpr unsigned long CAMERA_STATUS_STALE_MS = 5000;
 constexpr char CONTROL_MODE_WIFI[] = "wifi";
 constexpr char CONTROL_MODE_GAMEPAD[] = "gamepad";
 
@@ -135,6 +136,7 @@ String statusCameraNetIp;
 String statusCameraNetMessage = "Camera WiFi idle";
 String statusCameraFirmwareVersion;
 String statusCameraFirmwareBuild;
+unsigned long statusCameraLastSeenMs = 0;
 String statusCameraDetectLabel = "NO_TARGET";
 int statusCameraDetectCount = 0;
 String statusControlMode = CONTROL_MODE_WIFI;
@@ -287,6 +289,7 @@ void handleDiagnostics() {
   String cameraResolution;
   String cameraLabel;
   int cameraCount;
+  unsigned long cameraLastSeenMs;
   bool otaRunning;
   int otaProgress;
   int currentDriveX;
@@ -304,6 +307,7 @@ void handleDiagnostics() {
   cameraResolution = statusCameraActiveResolution;
   cameraLabel = statusCameraDetectLabel;
   cameraCount = statusCameraDetectCount;
+  cameraLastSeenMs = statusCameraLastSeenMs;
   otaRunning = statusOtaInProgress;
   otaProgress = statusOtaProgress;
   unlockStatus();
@@ -319,6 +323,11 @@ void handleDiagnostics() {
 
   const unsigned long driveAgeMs =
       currentDriveUpdatedAt == 0 ? 0 : millis() - currentDriveUpdatedAt;
+  const unsigned long nowMs = millis();
+  const unsigned long cameraStatusAgeMs =
+      cameraLastSeenMs == 0 ? 0 : nowMs - cameraLastSeenMs;
+  const bool cameraStatusStale =
+      cameraLastSeenMs == 0 || cameraStatusAgeMs > CAMERA_STATUS_STALE_MS;
   CRGB statusLeds[NUM_LEDS];
   for (int i = 0; i < NUM_LEDS; ++i) {
     statusLeds[i] = getStatusLedColor(i);
@@ -368,7 +377,9 @@ void handleDiagnostics() {
          ",\"camera\":{\"state\":\"" + jsonEscape(cameraState) +
          "\",\"ip\":\"" + jsonEscape(cameraIp) +
          "\",\"resolution\":\"" + jsonEscape(cameraResolution) +
-         "\",\"label\":\"" + jsonEscape(cameraLabel) +
+         "\",\"status_age_ms\":" + String(cameraStatusAgeMs) +
+         ",\"version_stale\":" + String(cameraStatusStale ? "true" : "false") +
+         ",\"label\":\"" + jsonEscape(cameraLabel) +
          "\",\"count\":" + String(cameraCount) +
          ",\"angle\":" + String(gimbal.angleDeg, 1) +
          ",\"target_angle\":" + String(gimbal.targetDeg, 1) + "}" +
@@ -628,6 +639,7 @@ void sendJsonStatus() {
   String cameraNetMessage;
   String cameraFirmwareVersion;
   String cameraFirmwareBuild;
+  unsigned long cameraLastSeenMs;
   String cameraDetectLabel;
   String cameraActiveResolution;
   String lastEvent;
@@ -653,12 +665,18 @@ void sendJsonStatus() {
   cameraNetMessage = statusCameraNetMessage;
   cameraFirmwareVersion = statusCameraFirmwareVersion;
   cameraFirmwareBuild = statusCameraFirmwareBuild;
+  cameraLastSeenMs = statusCameraLastSeenMs;
   cameraDetectLabel = statusCameraDetectLabel;
   cameraActiveResolution = statusCameraActiveResolution;
   cameraDetectCount = statusCameraDetectCount;
   lastEvent = statusLastEvent;
   activeMode = trace_mode ? "track_mode" : "";
   unlockStatus();
+
+  const unsigned long cameraStatusAgeMs =
+      cameraLastSeenMs == 0 ? 0 : millis() - cameraLastSeenMs;
+  const bool cameraStatusStale =
+      cameraLastSeenMs == 0 || cameraStatusAgeMs > CAMERA_STATUS_STALE_MS;
 
   String json = "{\"boot_id\":" + String(statusBootId) +
                 ",\"firmware_version\":\"" + String(ROBOT_FIRMWARE_VERSION) + "\"" +
@@ -687,6 +705,8 @@ void sendJsonStatus() {
                 ",\"camera_net_message\":\"" + jsonEscape(cameraNetMessage) + "\"" +
                 ",\"camera_firmware_version\":\"" + jsonEscape(cameraFirmwareVersion) + "\"" +
                 ",\"camera_firmware_build\":\"" + jsonEscape(cameraFirmwareBuild) + "\"" +
+                ",\"camera_status_age_ms\":" + String(cameraStatusAgeMs) +
+                ",\"camera_version_stale\":" + String(cameraStatusStale ? "true" : "false") +
                 ",\"camera_resolution\":\"" + jsonEscape(cameraActiveResolution) + "\"" +
                 ",\"camera_detect_label\":\"" + jsonEscape(cameraDetectLabel) + "\"" +
                 ",\"camera_detect_count\":" + String(cameraDetectCount) + ",\"active_mode\":\"" + jsonEscape(activeMode) + "\"" +
@@ -1844,6 +1864,7 @@ void updateWebCameraNetworkStatus(const String& state, const String& ip,
   statusCameraNetState = state;
   statusCameraNetIp = ip;
   statusCameraNetMessage = message;
+  if (!firmwareVersion.isEmpty()) statusCameraLastSeenMs = millis();
   if (!firmwareVersion.isEmpty()) statusCameraFirmwareVersion = firmwareVersion;
   if (!firmwareBuild.isEmpty()) statusCameraFirmwareBuild = firmwareBuild;
   if (activeResolution == "160x120" || activeResolution == "320x240" ||

@@ -679,6 +679,8 @@ def run_object_tracking(resources):
     last_label = ""
     last_count = -1
     scan_candidates = []
+    last_status_report_ms = 0
+    status_report_interval_ms = 2000
 
     def receive_track_command(command):
         nonlocal pending_command
@@ -690,6 +692,7 @@ def run_object_tracking(resources):
         "READY",
         resources.get("device_ip", ""),
         f"Tracking ready: detector={detector_status}",
+        active_resolution,
     )
     report_camera_detection(serial_dev, "NO_TARGET", 0)
 
@@ -703,6 +706,16 @@ def run_object_tracking(resources):
         )
         now_ms = time.time_ms()
         frame_count += 1
+
+        if now_ms - last_status_report_ms >= status_report_interval_ms:
+            last_status_report_ms = now_ms
+            report_camera_status(
+                serial_dev,
+                "READY",
+                resources.get("device_ip", ""),
+                f"Heartbeat detector={detector_status}",
+                active_resolution,
+            )
 
         if pending_command:
             command = pending_command
@@ -743,6 +756,7 @@ def run_object_tracking(resources):
                     "READY",
                     resources.get("device_ip", ""),
                     f"Scan mode active: detector={detector_status}",
+                    active_resolution,
                 )
                 report_camera_detection(serial_dev, "TARGET_SCAN", 0)
             elif command.startswith("TRACKROI:"):
@@ -1061,7 +1075,7 @@ def run_object_tracking(resources):
                     movement_command = _command(
                         state, profile=active_profile
                     )
-                    report_camera_status(serial_dev, "READY", resources.get("device_ip", ""), "Target lost - select again")
+                    report_camera_status(serial_dev, "READY", resources.get("device_ip", ""), "Target lost - select again", active_resolution)
                     print("[WROBOT] target lost after reacquire timeout")
 
             if filtered_box is not None and state in (LOCKED, COASTING, REACQUIRING):
@@ -1079,9 +1093,9 @@ def run_object_tracking(resources):
             serial_dev.write_str(movement_command)
         if new_ip:
             if preview_server and preview_server.is_ready():
-                report_camera_status(serial_dev, "CONNECTED", new_ip, "Camera WiFi connected")
+                report_camera_status(serial_dev, "CONNECTED", new_ip, "Camera WiFi connected", active_resolution)
             else:
-                report_camera_status(serial_dev, "PREVIEW_FAILED", new_ip, "Camera preview server failed")
+                report_camera_status(serial_dev, "PREVIEW_FAILED", new_ip, "Camera preview server failed", active_resolution)
         if preview_server:
             preview_server.update_frame(img)
             preview_server.poll()

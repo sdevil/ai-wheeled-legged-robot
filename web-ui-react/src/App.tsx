@@ -1099,7 +1099,12 @@ export default function App() {
               {copy.firmwareVersion} {telemetry.firmwareVersion || 'unknown'}
             </Typography>
             <Typography color="text.secondary" sx={{ mt: 0.5, fontSize: 11, fontWeight: 700 }}>
-              {copy.cameraFirmwareVersion} {telemetry.cameraFirmwareVersion || 'unknown'}
+              {copy.cameraFirmwareVersion}{' '}
+              {telemetry.cameraVersionStale
+                ? telemetry.cameraFirmwareVersion
+                  ? `cached ${telemetry.cameraFirmwareVersion}`
+                  : 'unknown'
+                : telemetry.cameraFirmwareVersion || 'unknown'}
             </Typography>
           </Stack>
         </Stack>

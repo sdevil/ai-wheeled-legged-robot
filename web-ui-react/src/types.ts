@@ -8,6 +8,8 @@ export interface RobotStatus {
   firmware_build: string;
   camera_firmware_version: string;
   camera_firmware_build: string;
+  camera_status_age_ms?: number;
+  camera_version_stale?: boolean;
   enabled: boolean;
   sitting: boolean;
   gamepad: boolean;
@@ -39,6 +41,8 @@ export interface DashboardModel {
   firmwareBuild: string;
   cameraFirmwareVersion: string;
   cameraFirmwareBuild: string;
+  cameraStatusAgeMs: number;
+  cameraVersionStale: boolean;
   online: boolean;
   robotHost: string;
   robotIp: string;
