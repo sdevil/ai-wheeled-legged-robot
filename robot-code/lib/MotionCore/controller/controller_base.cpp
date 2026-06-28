@@ -57,6 +57,17 @@ void controller_base::update_linear_reference(float dt, float target_speed)
     const bool start_release = zero_cmd && had_cmd;
     lpf_target_linear_vel += (target_speed - lpf_target_linear_vel) * alpha;
 
+    if(ctrl->balance_recover_active)
+    {
+        lpf_target_linear_vel = 0.0f;
+        ctrl->lqi_param.ref.linear_vel = 0.0f;
+        ctrl->lqi_param.integral.linear_vel_error = 0.0f;
+        linear_release_active = 0;
+        linear_release_timer = 0.0f;
+        last_linear_target_speed = 0.0f;
+        return;
+    }
+
     if(jump_active)
     {
         lpf_target_linear_vel = 0.0f;
@@ -111,8 +122,7 @@ void controller_base::update_linear_reference(float dt, float target_speed)
         ctrl->lqi_param.ref.linear_vel = 0.0f;
     }
 
-    const bool freeze_linear_integral = linear_release_active ||
-                                        ctrl->balance_recover_active;
+    const bool freeze_linear_integral = linear_release_active;
     if(!freeze_linear_integral)
     {
         ctrl->lqi_param.integral.linear_vel_error +=
@@ -133,6 +143,14 @@ void controller_base::update_yaw_reference(float dt, float target_speed)
     const float tau = 0.009f;
     const float alpha = 1.0f - expf(-dt / tau);
     lpf_target_steering_vel += (target_speed - lpf_target_steering_vel) * alpha;
+
+    if(ctrl->balance_recover_active)
+    {
+        lpf_target_steering_vel = 0.0f;
+        ctrl->lqi_param.ref.yaw_rate = 0.0f;
+        ctrl->lqi_param.integral.yaw_rate_error = 0.0f;
+        return;
+    }
 
     if(jump_active)
     {
@@ -165,16 +183,13 @@ void controller_base::update_yaw_reference(float dt, float target_speed)
 
     ctrl->lqi_param.ref.yaw_rate = -lpf_target_steering_vel;
 
-    if(!ctrl->balance_recover_active)
-    {
-        ctrl->lqi_param.integral.yaw_rate_error +=
-            (ctrl->lqi_param.ref.yaw_rate - ctrl->lqi_param.state.yaw_rate) * dt;
-        ctrl->lqi_param.integral.yaw_rate_error = constrain(
-            ctrl->lqi_param.integral.yaw_rate_error,
-            -ctrl->lqi_param.integral_clamp.yaw_rate_error,
-            ctrl->lqi_param.integral_clamp.yaw_rate_error
-        );
-    }
+    ctrl->lqi_param.integral.yaw_rate_error +=
+        (ctrl->lqi_param.ref.yaw_rate - ctrl->lqi_param.state.yaw_rate) * dt;
+    ctrl->lqi_param.integral.yaw_rate_error = constrain(
+        ctrl->lqi_param.integral.yaw_rate_error,
+        -ctrl->lqi_param.integral_clamp.yaw_rate_error,
+        ctrl->lqi_param.integral_clamp.yaw_rate_error
+    );
 }
 
 void controller_base::reset_motion_reference()
@@ -197,5 +212,10 @@ void controller_base::reset()
     reset_motion_reference();
     ctrl->roll_adjust = 0.0f;
     ctrl->leg_height_base = (float)LEG_HEIGHT_BASE;
-    ctrl->pid_roll_angle = PIDController(ctrl->pid_roll_angle.P, ctrl->pid_roll_angle.I, ctrl->pid_roll_angle.D, ctrl->pid_roll_angle.output_ramp, ctrl->pid_roll_angle.limit);
+    ctrl->pid_roll_angle = PIDController(ctrl->pid_roll_angle.P,
+                                         ctrl->pid_roll_angle.I,
+                                         ctrl->pid_roll_angle.D,
+                                         ctrl->pid_roll_angle.output_ramp,
+                                         ctrl->pid_roll_angle.limit);
 }
+

@@ -83,9 +83,6 @@ void fsm::update()
         case mode_state::JUMP:
             if(jump == jump_state::DONE){mode = mode_state::BALANCE;}
             break;
-
-        case mode_state::ERROR:
-            break;
     }
 }
 
@@ -115,13 +112,6 @@ void fsm::loop(uint32_t tick)
 
         case mode_state::JUMP:  // 跳跃状态 
             ctrl->jump_loop(tick);
-            break;
-
-        case mode_state::ERROR:
-            ctrl->enable_balance = 0;
-            ctrl->enable_steering = 0;
-            ctrl->enable_motor = 0;
-            ctrl->base_components.reset_motion_reference();
             break;
     }
 

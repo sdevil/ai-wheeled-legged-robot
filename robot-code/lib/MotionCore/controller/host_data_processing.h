@@ -31,7 +31,7 @@ class host_data_processing {
     private:
         void parse_rx_buffer();
         void handle_frame(uint8_t *frame, uint32_t len);
-        void parse_gamepad(uint8_t *frame);
+        void parse_xbox(uint8_t *frame);
 
     private:
         uint32_t send_timer = 0;

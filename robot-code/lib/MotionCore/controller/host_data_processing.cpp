@@ -225,7 +225,7 @@ void host_data_processing::handle_frame(uint8_t *frame, uint32_t len)
     switch(type)
     {
         case 0x01:
-            parse_gamepad(frame);
+            parse_xbox(frame);
             break;
     }
 }
@@ -233,7 +233,7 @@ void host_data_processing::handle_frame(uint8_t *frame, uint32_t len)
 /**
  * @brief 处理摇杆数据
  */
-void host_data_processing::parse_gamepad(uint8_t *frame)
+void host_data_processing::parse_xbox(uint8_t *frame)
 {
     uint8_t payload_len = frame[3];
     if(payload_len < 14){return;}
