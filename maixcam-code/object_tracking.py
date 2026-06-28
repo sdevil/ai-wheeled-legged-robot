@@ -722,7 +722,7 @@ def run_object_tracking(resources):
 
     def receive_track_command(command):
         nonlocal pending_command
-        pending_command = command
+        pending_command = str(command or "").strip().rstrip(";\r\n ")
 
     if preview_server is not None:
         try:

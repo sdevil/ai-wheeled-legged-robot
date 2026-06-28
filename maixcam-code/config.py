@@ -64,7 +64,7 @@ def _load_app_version():
 
 
 APP_VERSION = _load_app_version()
-BUILD_ID = "2026-06-29-lock-roi-fallback-01"
+BUILD_ID = "2026-06-29-http-command-normalize-01"
 
 WIFI_AUTO_CONNECT = True
 FORCE_ROBOT_AP_MODE = False
