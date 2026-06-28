@@ -724,6 +724,14 @@ def run_object_tracking(resources):
         nonlocal pending_command
         pending_command = str(command or "").strip().rstrip(";\r\n ")
 
+    def publish_detection(label, count=0):
+        report_camera_detection(serial_dev, label, count)
+        if preview_server is not None:
+            try:
+                preview_server.update_detection(label, count)
+            except Exception as exc:
+                print(f"[WROBOT] preview detection update failed: {exc}")
+
     if preview_server is not None:
         try:
             preview_server.set_command_handler(receive_track_command)
@@ -739,7 +747,7 @@ def run_object_tracking(resources):
         f"Tracking ready: detector={detector_status}",
         active_resolution,
     )
-    report_camera_detection(serial_dev, "NO_TARGET", 0)
+    publish_detection("NO_TARGET", 0)
 
     while not app.need_exit():
         img = cam.read()
@@ -780,7 +788,7 @@ def run_object_tracking(resources):
                 semantic_miss_frames = 0
                 semantic_valid_until_ms = 0
                 velocity_x, velocity_y = 0.0, 0.0
-                report_camera_detection(serial_dev, "NO_TARGET", 0)
+                publish_detection("NO_TARGET", 0)
             elif command.startswith("TRACKSCAN"):
                 scan_mode = True
                 scan_candidates = []
@@ -803,7 +811,7 @@ def run_object_tracking(resources):
                     f"Scan mode active: detector={detector_status}",
                     active_resolution,
                 )
-                report_camera_detection(serial_dev, "TARGET_SCAN", 0)
+                publish_detection("TARGET_SCAN", 0)
             elif command.startswith("TRACKROI:"):
                 try:
                     scan_mode = False
@@ -855,7 +863,7 @@ def run_object_tracking(resources):
                     missed_frames, stable_frames, lost_since_ms = 0, TRACK_ACQUIRE_CONFIRM_FRAMES, 0
                     filtered_box = [float(value) for value in semantic.box]
                     velocity_x, velocity_y = 0.0, 0.0
-                    report_camera_detection(serial_dev, _semantic_label(target_family, target_label, LOCKED), 1)
+                    publish_detection(_semantic_label(target_family, target_label, LOCKED), 1)
                     print(f"[WROBOT] target locked from selection: x={x}, y={y}, w={w}, h={h}, target_h={target_height}, family={target_family}")
                     scan_candidates = []
                 except Exception as exc:
@@ -867,7 +875,7 @@ def run_object_tracking(resources):
                     classify_frames = 0
                     semantic_miss_frames = 0
                     semantic_valid_until_ms = 0
-                    report_camera_detection(serial_dev, "TARGET_INVALID", 0)
+                    publish_detection("TARGET_INVALID", 0)
                     print(f"[WROBOT] target selection failed: {exc}")
             elif command.startswith("TRACKDIST:"):
                 delta = _track_distance_delta(command)
@@ -1152,11 +1160,11 @@ def run_object_tracking(resources):
                 img.draw_string(x, max(2, y - 18), f"{state} {display_label} {score:.2f}", color)
 
         if detection_label != last_label or detection_count != last_count:
-            report_camera_detection(serial_dev, detection_label, detection_count)
+            publish_detection(detection_label, detection_count)
             last_label, last_count = detection_label, detection_count
             last_detection_report_ms = now_ms
         elif scan_mode and not tracking and now_ms - last_detection_report_ms >= detection_report_interval_ms:
-            report_camera_detection(serial_dev, detection_label, detection_count)
+            publish_detection(detection_label, detection_count)
             last_detection_report_ms = now_ms
 
         if movement_command:

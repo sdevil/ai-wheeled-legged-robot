@@ -99,6 +99,39 @@ export class RobotApi {
     return this.wsReady ? 'WebSocket' : 'HTTP fallback';
   }
 
+  private cameraStatusUrl(cameraUrl: string) {
+    const trimmed = cameraUrl.trim();
+    if (!trimmed) return '';
+    try {
+      const url = new URL(trimmed);
+      url.pathname = '/api/status';
+      url.search = '';
+      url.hash = '';
+      return url.toString();
+    } catch {
+      const base = trimmed.replace(/\/(?:stream\.mjpg|snapshot\.jpg)?(?:\?.*)?$/, '');
+      return `${base}/api/status`;
+    }
+  }
+
+  private async fetchCameraRuntimeStatus(cameraUrl: string, signal?: AbortSignal) {
+    const statusUrl = this.cameraStatusUrl(cameraUrl);
+    if (!statusUrl) return null;
+    try {
+      const response = await this.fetchWithTimeout(statusUrl, { cache: 'no-store' }, 450, signal);
+      if (!response.ok) return null;
+      const data = await response.json() as {
+        label?: string;
+        count?: number;
+        version?: string;
+        resolution?: string;
+      };
+      return data;
+    } catch {
+      return null;
+    }
+  }
+
   private async fetchWithTimeout(
     input: RequestInfo | URL,
     init: RequestInit,
@@ -129,6 +162,10 @@ export class RobotApi {
       const cameraUrl = data.camera_net_ip
         ? `http://${data.camera_net_ip}:8080/stream.mjpg`
         : data.camera_url || cameraUrlOverride;
+      const cameraRuntime = await this.fetchCameraRuntimeStatus(cameraUrl, signal);
+      const targetLabelRaw = cameraRuntime?.label || data.camera_detect_label || 'NO_TARGET';
+      const targetCount = cameraRuntime?.count ?? data.camera_detect_count ?? 0;
+      const cameraResolution = cameraRuntime?.resolution || data.camera_resolution || '';
       return {
         bootId: data.boot_id || 0,
         firmwareVersion: data.firmware_version || '',
@@ -151,17 +188,17 @@ export class RobotApi {
         fps: 0,
         latencyMs: 0,
         aiMode: data.active_mode === 'track_mode' ? 'Track' : data.enabled ? 'Active' : 'Standby',
-        targetLabelRaw: data.camera_detect_label || 'NO_TARGET',
-        targetLabel: data.camera_detect_label === 'NO_TARGET'
+        targetLabelRaw,
+        targetLabel: targetLabelRaw === 'NO_TARGET'
           ? 'No Target'
-          : `${formatDetectionLabel(data.camera_detect_label)}${data.camera_detect_count > 1 ? ` x${data.camera_detect_count}` : ''}`,
+          : `${formatDetectionLabel(targetLabelRaw)}${targetCount > 1 ? ` x${targetCount}` : ''}`,
         speedMps: 0,
         pitch: data.angle,
         roll: 0,
         temperatureC: 0,
         cameraState: data.camera_net_state,
         cameraMessage: data.camera_net_message,
-        cameraResolution: data.camera_resolution || '',
+        cameraResolution,
         cameraIp: data.camera_net_ip,
         cameraUrl,
         clients: data.clients,

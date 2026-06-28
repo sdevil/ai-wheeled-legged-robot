@@ -3,6 +3,8 @@ import traceback
 import time
 
 from config import (
+    APP_VERSION,
+    BUILD_ID,
     WEB_PREVIEW_ENCODE_INTERVAL_MS,
     WEB_PREVIEW_ENABLED,
     WEB_PREVIEW_HOST,
@@ -70,6 +72,10 @@ class SnapshotServer:
         self._pending_stream_offset = 0
         self._next_stream_data = None
         self._command_handler = None
+        self._detection_label = "NO_TARGET"
+        self._detection_count = 0
+        self._status_message = "ready"
+        self._resolution = resolution
         print(
             f"[WEB] profile: {resolution}, interval={self.encode_interval_ms}ms, "
             f"quality={self.jpeg_quality}"
@@ -77,6 +83,13 @@ class SnapshotServer:
 
     def set_command_handler(self, handler):
         self._command_handler = handler
+
+    def update_detection(self, label, count=0):
+        self._detection_label = str(label or "NO_TARGET")
+        self._detection_count = int(count or 0)
+
+    def update_status_message(self, message):
+        self._status_message = str(message or "")
 
     def start(self, device_ip=""):
         if not self.enabled:
@@ -167,6 +180,8 @@ class SnapshotServer:
                 self._send_response(client, 200, b"text/html; charset=utf-8", self._html)
             elif path == "/ping":
                 self._send_response(client, 200, b"text/plain; charset=utf-8", b"pong")
+            elif path.startswith("/api/status"):
+                self._send_status(client)
             elif path.startswith("/api/command"):
                 self._handle_command(client, path)
             elif path.startswith(self.stream_path):
@@ -190,6 +205,20 @@ class SnapshotServer:
             self._send_response(client, 503, b"text/plain; charset=utf-8", b"No Video Signal")
             return
         self._send_response(client, 200, b"image/jpeg", self._latest_jpeg)
+
+    def _send_status(self, client):
+        body = (
+            "{"
+            f"\"ok\":true,"
+            f"\"version\":\"{_json_escape(APP_VERSION)}\","
+            f"\"build\":\"{_json_escape(BUILD_ID)}\","
+            f"\"resolution\":\"{_json_escape(self._resolution)}\","
+            f"\"label\":\"{_json_escape(self._detection_label)}\","
+            f"\"count\":{int(self._detection_count)},"
+            f"\"message\":\"{_json_escape(self._status_message)}\""
+            "}"
+        ).encode("utf-8")
+        self._send_response(client, 200, b"application/json; charset=utf-8", body)
 
     def _handle_command(self, client, path):
         command = self._query_value(path, "cmd")
@@ -285,6 +314,7 @@ class SnapshotServer:
             + b"Content-Type: " + content_type + b"\r\n"
             + b"Content-Length: " + str(len(body)).encode("ascii") + b"\r\n"
             + b"Cache-Control: no-store\r\n"
+            + b"Access-Control-Allow-Origin: *\r\n"
             + b"Connection: close\r\n\r\n"
         )
         client.sendall(header + body)
@@ -369,3 +399,7 @@ def _url_decode(value):
         output.append(value[index])
         index += 1
     return "".join(output)
+
+
+def _json_escape(value):
+    return str(value or "").replace("\\", "\\\\").replace('"', '\\"')
