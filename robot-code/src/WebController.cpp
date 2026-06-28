@@ -65,8 +65,8 @@ constexpr char PREF_UI_LANGUAGE[] = "ui_language";
 constexpr char DEFAULT_UI_LANGUAGE[] = "en";
 constexpr char DEFAULT_ROBOT_NAME[] = "WRobot-sdevil";
 constexpr char DEFAULT_CAMERA_RESOLUTION[] = "640x480";
-constexpr char ROBOT_FIRMWARE_VERSION[] = "3.2.107";
-constexpr char ROBOT_FIRMWARE_BUILD[] = "2026-06-29-camera-url-recovery-01";
+constexpr char ROBOT_FIRMWARE_VERSION[] = "3.2.108";
+constexpr char ROBOT_FIRMWARE_BUILD[] = "2026-06-29-track-lock-guard-01";
 constexpr unsigned long CAMERA_STATUS_STALE_MS = 5000;
 constexpr char CONTROL_MODE_WIFI[] = "wifi";
 constexpr char CONTROL_MODE_GAMEPAD[] = "gamepad";
@@ -159,6 +159,8 @@ void unlockStatus() {
   if (statusMutex != nullptr) xSemaphoreGive(statusMutex);
 }
 
+bool cameraTargetLockedLabel(const String& label);
+String trackRoiEventMessage(int x, int y, int width, int height, int profile);
 
 String jsonEscape(const String& input) {
   String out;
@@ -1243,8 +1245,16 @@ void handleWebSocketMessage(const String& message) {
     height = constrain(height, 1, 10000 - y);
     jsonIntValue(message, "profile", profile);
     profile = constrain(profile, 0, 3);
+    lockStatus();
+    const bool alreadyLocked = cameraTargetLockedLabel(statusCameraDetectLabel);
+    unlockStatus();
+    if (alreadyLocked) {
+      recordDiagnosticEvent("camera", "track_roi ignored: target already locked");
+      sendWebSocketAck("track_roi", requestId, true);
+      return;
+    }
     sendCameraTrackSelection(x, y, width, height, profile);
-    recordDiagnosticEvent("camera", String("track_roi p=") + String(profile));
+    recordDiagnosticEvent("camera", trackRoiEventMessage(x, y, width, height, profile));
     sendWebSocketAck("track_roi", requestId, true);
     return;
   }
@@ -1496,9 +1506,27 @@ void handleTrackSelection() {
   const int width = constrain(server.arg("w").toInt(), 1, 10000 - x);
   const int height = constrain(server.arg("h").toInt(), 1, 10000 - y);
   const int profile = constrain(server.arg("profile").toInt(), 0, 3);
+  lockStatus();
+  const bool alreadyLocked = cameraTargetLockedLabel(statusCameraDetectLabel);
+  unlockStatus();
+  if (alreadyLocked) {
+    recordDiagnosticEvent("camera", "track_roi ignored: target already locked");
+    server.send(200, "application/json", "{\"ok\":true,\"ignored\":\"target already locked\"}");
+    return;
+  }
   sendCameraTrackSelection(x, y, width, height, profile);
-  recordDiagnosticEvent("camera", String("track_roi p=") + String(profile));
+  recordDiagnosticEvent("camera", trackRoiEventMessage(x, y, width, height, profile));
   server.send(200, "application/json", "{\"ok\":true}");
+}
+
+bool cameraTargetLockedLabel(const String& label) {
+  return label == "TARGET_LOCKED" || label == "PING_PONG_BALL" ||
+         label.endsWith("_LOCKED");
+}
+
+String trackRoiEventMessage(int x, int y, int width, int height, int profile) {
+  return String("track_roi x=") + x + ",y=" + y + ",w=" + width +
+         ",h=" + height + ",p=" + profile;
 }
 
 void handleTrackUnlock() {

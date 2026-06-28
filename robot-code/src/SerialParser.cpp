@@ -386,7 +386,7 @@ void sendCameraTrackSelection(int x, int y, int width, int height,
                     ",w=" + String(width) + ",h=" + String(height) +
                     ",p=" + String(constrain(profile, 0, 3)) + ";",
                     "TRACKROI");
-  updateWebCameraDetectionStatus("TARGET_SELECTED", 1);
+  updateWebCameraDetectionStatus("TARGET_LOCKED", 1);
 }
 
 void sendCameraTrackDistanceAdjust(int value) {
