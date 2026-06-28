@@ -15,7 +15,6 @@ class controller_base {
         void update_linear_reference(float dt, float target_speed);
         void update_yaw_reference(float dt, float target_speed);
         void reset_motion_reference();
-        void set_cam_angle(uint32_t tick);
         void reset();
 
     private:
@@ -36,10 +35,6 @@ class controller_base {
         float linear_release_timer = 0.0f;
         uint8_t linear_release_active = 0;
 
-        float cam_max_speed = 60.0f;
-        float cam_angle = 60.0f;
-        int16_t cam_last_angle = 0;
-        float cam_lpf_target_speed = 0.0f;
 };
 
 #endif

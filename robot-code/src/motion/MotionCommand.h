@@ -28,7 +28,6 @@ enum class MotionCommandType : uint8_t {
   TrackStop,
   TrackTarget,
   TrackObservation,
-  CameraGimbal,
   LegLean,
   LegHeight,
   LegHeightPercent,

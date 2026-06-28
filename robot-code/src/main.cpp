@@ -8,7 +8,9 @@
 #include "SerialParser.h"
 #include "VoltageMonitor.h"
 #include "WebController.h"
+#include "camera/CameraGimbalController.h"
 #include "motion/MotionCoreAdapter.h"
+#include "motion/MotionCommandGateway.h"
 
 #ifndef ENABLE_GAMEPAD_BLE
 #define ENABLE_GAMEPAD_BLE 0
@@ -70,16 +72,12 @@ const char* webActionName(WebRobotAction action) {
 
 void commandMotion(const MotionCommand& command, const char* trigger,
                    bool event = false) {
-  setMotionTrigger(trigger);
-  if (event) recordDiagnosticEvent("motion", trigger);
-  motionCore().command(command);
+  motionGateway().dispatch(command, trigger, event);
 }
 
 void commandMotion(const MotionCommand& command, const String& trigger,
                    bool event = false) {
-  setMotionTrigger(trigger);
-  if (event) recordDiagnosticEvent("motion", trigger);
-  motionCore().command(command);
+  motionGateway().dispatch(command, trigger, event);
 }
 #if ENABLE_GAMEPAD_BLE
 // Match the 5% dead zone used by the shared motion core so Web and gamepad axes
@@ -144,6 +142,7 @@ void dispatchWebAction(WebRobotAction action) {
       commandMotion(MotionCommand::simple(MotionCommandType::Sit), trigger, true);
       break;
     case WebRobotAction::ResetPose:
+      cameraGimbal().resetPose();
       commandMotion(MotionCommand::simple(MotionCommandType::ResetPose), trigger, true);
       break;
     case WebRobotAction::CancelKick:
@@ -211,10 +210,9 @@ void processWebControl() {
   }
   const int cameraPitchDelta = consumeWebCameraPitchDelta();
   if (cameraPitchDelta != 0) {
-    MotionCommand cameraCommand;
-    cameraCommand.type = MotionCommandType::CameraGimbal;
-    cameraCommand.y = cameraPitchDelta;
-    commandMotion(cameraCommand, String("web:gimbal_pitch:") + cameraPitchDelta);
+    const String trigger = String("web:gimbal_pitch:") + cameraPitchDelta;
+    setMotionTrigger(trigger);
+    cameraGimbal().pitchDelta(cameraPitchDelta);
   }
 
   int joyX = 0;
@@ -340,11 +338,10 @@ void processControllerData(const GamepadControllerNotificationParser& data) {
   const unsigned long now = millis();
   const int gimbalPitch = axisToPercent(data.joyRVert, true);
   if (gimbalPitch != 0 && now - lastGimbalCommandMs >= 50) {
-    MotionCommand command;
-    command.type = MotionCommandType::CameraGimbal;
     const int direction = gimbalPitch > 0 ? 1 : -1;
-    command.y = direction * constrain((abs(gimbalPitch) + 32) / 33, 1, 3);
-    commandMotion(command, String("gamepad:gimbal_pitch:") + command.y);
+    const int delta = direction * constrain((abs(gimbalPitch) + 32) / 33, 1, 3);
+    setMotionTrigger(String("gamepad:gimbal_pitch:") + delta);
+    cameraGimbal().pitchDelta(delta);
     lastGimbalCommandMs = now;
   }
 }
@@ -382,6 +379,7 @@ void setup() {
   }
 
   motionCore().begin();
+  cameraGimbal().begin();
 
 #if ENABLE_GAMEPAD_BLE
   if (gamepad_enabled) {
@@ -439,6 +437,7 @@ void loop() {
   }
 
   motionCore().update();
+  cameraGimbal().update();
   if (!otaRunning && millis() - lastStatusPublishMs >= 50) {
     lastStatusPublishMs = millis();
     publishStatus();

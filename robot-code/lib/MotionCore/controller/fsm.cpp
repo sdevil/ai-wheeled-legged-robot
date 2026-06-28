@@ -125,6 +125,6 @@ void fsm::loop(uint32_t tick)
             break;
     }
 
-    ctrl->base_components.set_cam_angle(tick);  // 设置相机角度 
+    // Camera pitch is owned by CameraGimbalController, outside the motion core.
     ctrl->lqi_loop(tick);                       // LQR 循环
 }

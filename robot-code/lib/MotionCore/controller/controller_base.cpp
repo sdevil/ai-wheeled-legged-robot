@@ -192,31 +192,6 @@ void controller_base::reset_motion_reference()
     ctrl->lqi_param.integral.yaw_rate_error = 0.0f;
 }
 
-void controller_base::set_cam_angle(uint32_t tick)
-{
-    float dt = (float)tick * 1.0e-3f;
-
-    float speed = 0.0f;
-    if(ctrl->buttons & BTN_SELECT)
-    {
-        if(ctrl->buttons & BTN_UP){speed = cam_max_speed;}
-        else if(ctrl->buttons & BTN_DOWN){speed = -cam_max_speed;}
-    }
-
-    const float tau = 0.05f;
-    float alpha = 1.0f - expf(-dt / tau);
-    cam_lpf_target_speed += (speed - cam_lpf_target_speed) * alpha;
-
-    cam_angle += cam_lpf_target_speed * dt;
-    cam_angle = constrain(cam_angle, CAMSERVO_MIN, CAMSERVO_MAX);
-
-    if((int16_t)cam_angle != cam_last_angle)
-    {
-        cam_last_angle = cam_angle;
-        cam_servo.set_angle(cam_angle);
-    }
-}
-
 void controller_base::reset()
 {
     reset_motion_reference();

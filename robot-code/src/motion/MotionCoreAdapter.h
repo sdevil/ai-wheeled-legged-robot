@@ -23,8 +23,6 @@ class MotionCoreAdapter final : public MotionCore {
   void updateTrackingMotion(uint32_t now);
   void updateStandNudge(uint32_t now);
   void updateLegHeightTarget(uint32_t now);
-  void updateCameraGimbal(uint32_t now);
-  void updateCameraCalibration(uint32_t now);
   int legHeightPercent() const;
   int legLeanPercent() const;
   float legHeightBaseFromPercent(int percent) const;
@@ -43,7 +41,6 @@ class MotionCoreAdapter final : public MotionCore {
   uint32_t trackStateSinceMs_ = 0;
   uint32_t lastTrackObservationMs_ = 0;
   uint32_t lastTrackMotionUpdateMs_ = 0;
-  uint32_t lastTrackGimbalUpdateMs_ = 0;
   uint32_t lastTrackControlUpdateMs_ = 0;
   uint32_t trackBalanceReadySinceMs_ = 0;
   uint32_t trackChassisHoldUntilMs_ = 0;
@@ -82,12 +79,6 @@ class MotionCoreAdapter final : public MotionCore {
   int trackDistanceCandidateDirection_ = 0;
   uint8_t trackDistanceCandidateFrames_ = 0;
   int lastTargetDirection_ = 1;
-  float searchCameraCenterAngle_ = 105.0f;
-  float cameraAngle_ = 105.0f;
-  float cameraTargetAngle_ = 105.0f;
-  uint32_t lastCameraGimbalUpdateMs_ = 0;
-  bool cameraCalibrationActive_ = false;
-  uint32_t cameraCalibrationStartedMs_ = 0;
   bool legHeightTargetActive_ = false;
   bool standNudgePending_ = false;
   float legHeightBaseTarget_ = 0.0f;

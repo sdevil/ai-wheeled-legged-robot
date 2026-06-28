@@ -6,7 +6,6 @@
 #include "controller/controller.h"
 #include "Diagnostics.h"
 #include "motion_buttons.h"
-#include "devices/ptk7350.h"
 #include "system/task.h"
 
 namespace {
@@ -38,15 +37,6 @@ constexpr float kLegHeightControlMin = -1.0f;
 constexpr float kLegHeightControlMax = 49.0f;
 constexpr float kLegHeightSlewPerSecond = 42.0f;
 constexpr float kLegLeanMaxDeg = 16.0f;
-constexpr int kCameraMinDeg = 45;
-constexpr int kCameraMaxDeg = 150;
-constexpr int kCameraStandbyDeg = 105;
-constexpr int kTrackCameraMinDeg = 75;
-constexpr int kTrackCameraMaxDeg = 130;
-constexpr float kCameraSlewDegPerSecond = 70.0f;
-constexpr uint32_t kCameraCalibrationHighMs = 1200;
-constexpr uint32_t kCameraCalibrationLowMs = 3000;
-constexpr uint32_t kCameraCalibrationFinishMs = 4500;
 constexpr uint32_t kTrackSettleMs = 300;
 constexpr uint32_t kTrackBalanceStableMs = 500;
 constexpr uint32_t kTrackCommandTimeoutMs = 2500;
@@ -142,12 +132,6 @@ void MotionCoreAdapter::begin() {
   if (started_) return;
   started_ = true;
   ctrl.init();
-  cameraAngle_ = kCameraStandbyDeg;
-  cameraTargetAngle_ = kCameraMaxDeg;
-  cam_servo.set_angle((uint16_t)roundf(cameraAngle_));
-  cameraCalibrationActive_ = true;
-  cameraCalibrationStartedMs_ = millis();
-  frontier_servo.set_angle(0);
 
   // WiFi and the web server run on core 0. Keep the full motion pipeline on
   // core 1 so network activity cannot interrupt FOC output. Electrical angle
@@ -164,9 +148,7 @@ void MotionCoreAdapter::update() {
   const uint32_t now = millis();
   if (pulseButtons_ && deadlineReached(now, pulseUntilMs_)) pulseButtons_ = 0;
   updateLegHeightTarget(now);
-  updateCameraCalibration(now);
   updateStandNudge(now);
-  updateCameraGimbal(now);
 
   ctrl.host_data.buttons = pulseButtons_ | heldPostureButtons_;
   memcpy(ctrl.host_data.axes, axes_, sizeof(axes_));
@@ -199,8 +181,6 @@ void MotionCoreAdapter::command(const MotionCommand& command) {
       pulseButton(BTN_LB, 120);
       break;
     case MotionCommandType::ResetPose:
-      cameraTargetAngle_ = kCameraStandbyDeg;
-      frontier_servo.set_angle(0);
       break;
     case MotionCommandType::Move:
       if (!maintenance_) {
@@ -292,13 +272,6 @@ void MotionCoreAdapter::command(const MotionCommand& command) {
       break;
     case MotionCommandType::TrackObservation:
       if (tracking_ && !maintenance_) applyTrackObservation(command);
-      break;
-    case MotionCommandType::CameraGimbal:
-      if (!cameraCalibrationActive_) {
-        cameraTargetAngle_ = constrain(cameraTargetAngle_ + command.y,
-                                       (float)kCameraMinDeg,
-                                       (float)kCameraMaxDeg);
-      }
       break;
     case MotionCommandType::LegLean:
       if (!maintenance_) {
@@ -397,8 +370,6 @@ MotionTelemetry MotionCoreAdapter::telemetry() const {
   data.steeringAxis = axes_[0];
   data.linearReferenceMps = ctrl.lqi_param.ref.linear_vel;
   data.yawReferenceRad = ctrl.lqi_param.ref.yaw_rate;
-  data.cameraAngleDeg = cameraAngle_;
-  data.cameraTargetDeg = cameraTargetAngle_;
   data.controlLoopMaxGapUs = controlLoopMaxGapUs;
   data.motorLoopMaxGapUs = motorLoopMaxGapUs;
   data.motorLoopLateCount = motorLoopLateCount;
@@ -427,7 +398,7 @@ MotionTelemetry MotionCoreAdapter::telemetry() const {
 }
 
 bool MotionCoreAdapter::selfCheckPassed() const {
-  if (!started_ || cameraCalibrationActive_ ||
+  if (!started_ ||
       ctrl.fsm_state_machine.mode == fsm::mode_state::ERROR) {
     return false;
   }
@@ -449,25 +420,6 @@ bool MotionCoreAdapter::selfCheckPassed() const {
                            sts_servo_state[1].position > 1000 &&
                            sts_servo_state[1].position < 3000;
   return imuReady && servosReady;
-}
-
-void MotionCoreAdapter::updateCameraCalibration(uint32_t now) {
-  if (!cameraCalibrationActive_) return;
-  const uint32_t elapsed = now - cameraCalibrationStartedMs_;
-  if (elapsed < kCameraCalibrationHighMs) {
-    cameraTargetAngle_ = kCameraMaxDeg;
-  } else if (elapsed < kCameraCalibrationLowMs) {
-    cameraTargetAngle_ = kCameraMinDeg;
-  } else {
-    cameraTargetAngle_ = kCameraStandbyDeg;
-  }
-  if (elapsed >= kCameraCalibrationFinishMs &&
-      fabsf(cameraAngle_ - (float)kCameraStandbyDeg) < 1.0f) {
-    cameraAngle_ = kCameraStandbyDeg;
-    cameraTargetAngle_ = kCameraStandbyDeg;
-    cam_servo.set_angle(kCameraStandbyDeg);
-    cameraCalibrationActive_ = false;
-  }
 }
 
 float MotionCoreAdapter::legHeightBaseFromPercent(int percent) const {
@@ -508,19 +460,6 @@ void MotionCoreAdapter::updateLegHeightTarget(uint32_t now) {
   }
 }
 
-void MotionCoreAdapter::updateCameraGimbal(uint32_t now) {
-  const uint32_t elapsedMs =
-      lastCameraGimbalUpdateMs_ == 0 ? 2 : now - lastCameraGimbalUpdateMs_;
-  lastCameraGimbalUpdateMs_ = now;
-  const float dt = min(elapsedMs, (uint32_t)50) / 1000.0f;
-  const float previous = cameraAngle_;
-  cameraAngle_ = approach(cameraAngle_, cameraTargetAngle_,
-                          kCameraSlewDegPerSecond * dt);
-  if ((int)roundf(previous) != (int)roundf(cameraAngle_)) {
-    cam_servo.set_angle((uint16_t)roundf(cameraAngle_));
-  }
-}
-
 void MotionCoreAdapter::pulseButton(uint16_t button, uint32_t durationMs) {
   pulseButtons_ = button;
   pulseUntilMs_ = millis() + durationMs;
@@ -554,7 +493,7 @@ void MotionCoreAdapter::holdTrackingChassis(bool resetReference) {
 void MotionCoreAdapter::updateStandNudge(uint32_t now) {
   if (!standNudgePending_ && standNudgeUntilMs_ == 0) return;
 
-  if (maintenance_ || cameraCalibrationActive_) {
+  if (maintenance_) {
     standNudgePending_ = false;
     standNudgeBalanceSinceMs_ = 0;
     standNudgeUntilMs_ = 0;

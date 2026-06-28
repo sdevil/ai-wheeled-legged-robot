@@ -15,6 +15,7 @@
 #include "PreferencesManager.h"
 #include "RGBController.h"
 #include "VoltageMonitor.h"
+#include "camera/CameraGimbalController.h"
 #include "generated/WebUiBundle.h"
 #include "motion/MotionCoreAdapter.h"
 
@@ -70,8 +71,8 @@ constexpr char PREF_UI_LANGUAGE[] = "ui_language";
 constexpr char DEFAULT_UI_LANGUAGE[] = "en";
 constexpr char DEFAULT_ROBOT_NAME[] = "WRobot-sdevil";
 constexpr char DEFAULT_CAMERA_RESOLUTION[] = "640x480";
-constexpr char ROBOT_FIRMWARE_VERSION[] = "3.2.91";
-constexpr char ROBOT_FIRMWARE_BUILD[] = "2026-06-28-camera-motion-disabled-01";
+constexpr char ROBOT_FIRMWARE_VERSION[] = "3.2.92";
+constexpr char ROBOT_FIRMWARE_BUILD[] = "2026-06-28-motion-gateway-camera-gimbal-01";
 constexpr char CONTROL_MODE_WIFI[] = "wifi";
 constexpr char CONTROL_MODE_GAMEPAD[] = "gamepad";
 
@@ -277,6 +278,7 @@ void pollMdnsService() {
 
 void handleDiagnostics() {
   const MotionTelemetry motion = motionCore().telemetry();
+  const CameraGimbalTelemetry gimbal = cameraGimbal().telemetry();
   const BatteryStatus battery = getBatteryStatus();
   String robotNetState;
   String robotIp;
@@ -368,8 +370,8 @@ void handleDiagnostics() {
          "\",\"resolution\":\"" + jsonEscape(cameraResolution) +
          "\",\"label\":\"" + jsonEscape(cameraLabel) +
          "\",\"count\":" + String(cameraCount) +
-         ",\"angle\":" + String(motion.cameraAngleDeg, 1) +
-         ",\"target_angle\":" + String(motion.cameraTargetDeg, 1) + "}" +
+         ",\"angle\":" + String(gimbal.angleDeg, 1) +
+         ",\"target_angle\":" + String(gimbal.targetDeg, 1) + "}" +
          ",\"motion\":{\"mode\":\"" + String(motion.mode) +
          "\",\"enabled\":" + String(motion.enabled ? "true" : "false") +
          ",\"sitting\":" + String(motion.sitting ? "true" : "false") +

@@ -57,8 +57,6 @@ struct MotionTelemetry {
   float steeringAxis = 0.0f;
   float linearReferenceMps = 0.0f;
   float yawReferenceRad = 0.0f;
-  float cameraAngleDeg = 0.0f;
-  float cameraTargetDeg = 0.0f;
   uint32_t controlLoopMaxGapUs = 0;
   uint32_t motorLoopMaxGapUs = 0;
   uint32_t motorLoopLateCount = 0;
