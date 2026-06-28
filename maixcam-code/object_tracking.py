@@ -11,6 +11,7 @@ from config import (
     HYBRID_DETECTION_ENABLED, HYBRID_REACQUIRE_MIN_IOU,
     HYBRID_INITIAL_MIN_AREA_RATIO, HYBRID_INITIAL_MAX_AREA_RATIO,
     HYBRID_REINIT_TRACKER_ON_DETECT, HYBRID_ROI_MIN_IOU,
+    HYBRID_SCAN_EVERY_N_FRAMES,
     TRACK_ACQUIRE_CONFIRM_FRAMES,
     TRACK_BBOX_SMOOTH_ALPHA, TRACK_COAST_FRAMES, TRACK_DX_DEADBAND,
     TRACK_DY_DEADBAND, TRACK_MAX_CENTER_JUMP_RATIO, TRACK_MAX_SCALE_CHANGE,
@@ -737,6 +738,12 @@ def run_object_tracking(resources):
                 semantic_miss_frames = 0
                 semantic_valid_until_ms = 0
                 velocity_x, velocity_y = 0.0, 0.0
+                report_camera_status(
+                    serial_dev,
+                    "READY",
+                    resources.get("device_ip", ""),
+                    f"Scan mode active: detector={detector_status}",
+                )
                 report_camera_detection(serial_dev, "TARGET_SCAN", 0)
             elif command.startswith("TRACKROI:"):
                 try:
@@ -812,12 +819,16 @@ def run_object_tracking(resources):
         detection_label, detection_count = "NO_TARGET", 0
 
         if scan_mode and not tracking:
-            if hybrid_detector and hybrid_detector.ready() and frame_count % max(1, HYBRID_DETECT_EVERY_N_FRAMES) == 0:
+            if hybrid_detector and hybrid_detector.ready() and frame_count % max(1, HYBRID_SCAN_EVERY_N_FRAMES) == 0:
                 try:
                     scan_candidates = hybrid_detector._collect_candidates(img, "")
                 except Exception as exc:
                     print(f"[WROBOT] scan detect failed: {exc}")
                     scan_candidates = []
+            if not hybrid_detector or not hybrid_detector.ready():
+                img.draw_string(8, 8, "SCAN: detector unavailable", image.COLOR_RED)
+            elif not scan_candidates:
+                img.draw_string(8, 8, "SCAN: no target", image.COLOR_BLUE)
             for item in scan_candidates[:8]:
                 x, y, w, h = [int(value) for value in item.box]
                 color = image.COLOR_BLUE if item.family != "face" else image.COLOR_GREEN
