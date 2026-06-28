@@ -229,6 +229,9 @@ def handle_incoming_camera_commands(
         if command.startswith("CAMCFG:"):
             apply_camera_config_command(serial_dev, command, active_resolution)
             continue
+        if command == "CAMPING":
+            report_camera_status(serial_dev, "READY", "", "Ping ACK", active_resolution)
+            continue
         if (
             command.startswith("TRACKROI:")
             or command.startswith("TRACKDIST:")

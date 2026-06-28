@@ -11,6 +11,15 @@ namespace {
 char serialBuffer[512];
 uint8_t serialIndex = 0;
 bool serialFrameOverflow = false;
+uint32_t cameraTxCount = 0;
+uint32_t cameraStatusRxCount = 0;
+uint32_t cameraDetectionRxCount = 0;
+unsigned long cameraLastTxMs = 0;
+unsigned long cameraLastStatusRxMs = 0;
+unsigned long cameraLastDetectionRxMs = 0;
+String cameraLastTxCommand;
+String cameraLastStatus;
+String cameraLastDetection;
 
 String trimToken(const char* value) {
   String result = String(value ? value : "");
@@ -29,6 +38,13 @@ const char* trackingStateText(TrackObservationState state) {
     default:
       return "idle";
   }
+}
+
+void sendCameraCommand(const String& command, const String& diagnosticName) {
+  Serial.println(command);
+  cameraTxCount++;
+  cameraLastTxMs = millis();
+  cameraLastTxCommand = diagnosticName;
 }
 }  // namespace
 
@@ -189,6 +205,9 @@ void parseTrackingObservationCommand(char* cmd) {
                            String("camera:track:") + trackingStateText(state));
 }
 void parseCameraStatusCommand(char* cmd) {
+  cameraStatusRxCount++;
+  cameraLastStatusRxMs = millis();
+  cameraLastStatus = String(cmd);
   char* statusPtr = strstr(cmd, "CAMSTAT:");
   if (statusPtr == nullptr) return;
   statusPtr += 8;
@@ -225,6 +244,9 @@ void parseCameraStatusCommand(char* cmd) {
 }
 
 void parseCameraDetectionCommand(char* cmd) {
+  cameraDetectionRxCount++;
+  cameraLastDetectionRxMs = millis();
+  cameraLastDetection = String(cmd);
   char* detectPtr = strstr(cmd, "CAMDET:");
   if (detectPtr == nullptr) return;
   detectPtr += 7;
@@ -279,34 +301,52 @@ String percentEncodeForCamera(const String& input) {
 }
 
 void sendCameraWifiConfig(const String& ssid, const String& password) {
-  Serial.println("CAMWIFI:SSID=" + percentEncodeForCamera(ssid) +
-                 ",PWD=" + percentEncodeForCamera(password) + ";");
+  sendCameraCommand("CAMWIFI:SSID=" + percentEncodeForCamera(ssid) +
+                    ",PWD=" + percentEncodeForCamera(password) + ";",
+                    "CAMWIFI");
   updateWebCameraNetworkStatus("PENDING", "", "Camera WiFi config sent");
 }
 
 void sendCameraRuntimeConfig(const String& resolution) {
-  Serial.println("CAMCFG:RES=" + percentEncodeForCamera(resolution) + ";");
+  sendCameraCommand("CAMCFG:RES=" + percentEncodeForCamera(resolution) + ";",
+                    "CAMCFG");
   updateWebCameraNetworkStatus("PENDING", "", "Camera config sent");
 }
 
 void sendCameraTrackSelection(int x, int y, int width, int height,
                               int profile) {
-  Serial.println("TRACKROI:x=" + String(x) + ",y=" + String(y) +
-                 ",w=" + String(width) + ",h=" + String(height) +
-                 ",p=" + String(constrain(profile, 0, 3)) + ";");
+  sendCameraCommand("TRACKROI:x=" + String(x) + ",y=" + String(y) +
+                    ",w=" + String(width) + ",h=" + String(height) +
+                    ",p=" + String(constrain(profile, 0, 3)) + ";",
+                    "TRACKROI");
   updateWebCameraDetectionStatus("TARGET_SELECTED", 1);
 }
 
 void sendCameraTrackDistanceAdjust(int value) {
-  Serial.println("TRACKDIST:v=" + String(constrain(value, -100, 100)) + ";");
+  sendCameraCommand("TRACKDIST:v=" + String(constrain(value, -100, 100)) + ";",
+                    "TRACKDIST");
 }
 
 void sendCameraTrackScan() {
-  Serial.println("TRACKSCAN;");
+  sendCameraCommand("TRACKSCAN;", "TRACKSCAN");
   updateWebCameraDetectionStatus("TARGET_SCAN", 0);
 }
 
 void sendCameraTrackStop() {
-  Serial.println("TRACKSTOP;");
+  sendCameraCommand("TRACKSTOP;", "TRACKSTOP");
   updateWebCameraDetectionStatus("NO_TARGET", 0);
 }
+
+void sendCameraPing() {
+  sendCameraCommand("CAMPING;", "CAMPING");
+}
+
+uint32_t cameraProtocolTxCount() { return cameraTxCount; }
+uint32_t cameraProtocolStatusRxCount() { return cameraStatusRxCount; }
+uint32_t cameraProtocolDetectionRxCount() { return cameraDetectionRxCount; }
+unsigned long cameraProtocolLastTxMs() { return cameraLastTxMs; }
+unsigned long cameraProtocolLastStatusRxMs() { return cameraLastStatusRxMs; }
+unsigned long cameraProtocolLastDetectionRxMs() { return cameraLastDetectionRxMs; }
+String cameraProtocolLastTxCommand() { return cameraLastTxCommand; }
+String cameraProtocolLastStatus() { return cameraLastStatus; }
+String cameraProtocolLastDetection() { return cameraLastDetection; }

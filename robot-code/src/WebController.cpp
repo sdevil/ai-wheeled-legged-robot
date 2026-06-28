@@ -14,6 +14,7 @@
 #include "Diagnostics.h"
 #include "PreferencesManager.h"
 #include "RGBController.h"
+#include "SerialParser.h"
 #include "VoltageMonitor.h"
 #include "camera/CameraGimbalController.h"
 #include "generated/WebUiBundle.h"
@@ -23,13 +24,6 @@ extern float pid_cam_p;
 extern float pid_cam_d;
 extern int yaw_align_threshold;
 extern bool trace_mode;
-extern void sendCameraWifiConfig(const String& ssid, const String& password);
-extern void sendCameraRuntimeConfig(const String& resolution);
-extern void sendCameraTrackSelection(int x, int y, int width, int height,
-                                     int profile = 0);
-extern void sendCameraTrackDistanceAdjust(int value);
-extern void sendCameraTrackScan();
-extern void sendCameraTrackStop();
 
 namespace {
 constexpr char WIFI_SSID[] = "sdevil-WRobot";
@@ -71,8 +65,8 @@ constexpr char PREF_UI_LANGUAGE[] = "ui_language";
 constexpr char DEFAULT_UI_LANGUAGE[] = "en";
 constexpr char DEFAULT_ROBOT_NAME[] = "WRobot-sdevil";
 constexpr char DEFAULT_CAMERA_RESOLUTION[] = "640x480";
-constexpr char ROBOT_FIRMWARE_VERSION[] = "3.2.102";
-constexpr char ROBOT_FIRMWARE_BUILD[] = "2026-06-28-camera-live-status-01";
+constexpr char ROBOT_FIRMWARE_VERSION[] = "3.2.103";
+constexpr char ROBOT_FIRMWARE_BUILD[] = "2026-06-28-camera-protocol-diagnostics-01";
 constexpr unsigned long CAMERA_STATUS_STALE_MS = 5000;
 constexpr char CONTROL_MODE_WIFI[] = "wifi";
 constexpr char CONTROL_MODE_GAMEPAD[] = "gamepad";
@@ -335,6 +329,12 @@ void handleDiagnostics() {
       cameraLastSeenMs == 0 || cameraStatusAgeMs > CAMERA_STATUS_STALE_MS;
   const bool cameraVersionStale =
       cameraVersionSeenMs == 0 || cameraVersionAgeMs > CAMERA_STATUS_STALE_MS;
+  const unsigned long cameraTxAgeMs =
+      cameraProtocolLastTxMs() == 0 ? 0 : nowMs - cameraProtocolLastTxMs();
+  const unsigned long cameraStatusRxAgeMs =
+      cameraProtocolLastStatusRxMs() == 0 ? 0 : nowMs - cameraProtocolLastStatusRxMs();
+  const unsigned long cameraDetectionRxAgeMs =
+      cameraProtocolLastDetectionRxMs() == 0 ? 0 : nowMs - cameraProtocolLastDetectionRxMs();
   CRGB statusLeds[NUM_LEDS];
   for (int i = 0; i < NUM_LEDS; ++i) {
     statusLeds[i] = getStatusLedColor(i);
@@ -391,7 +391,16 @@ void handleDiagnostics() {
          ",\"label\":\"" + jsonEscape(cameraLabel) +
          "\",\"count\":" + String(cameraCount) +
          ",\"angle\":" + String(gimbal.angleDeg, 1) +
-         ",\"target_angle\":" + String(gimbal.targetDeg, 1) + "}" +
+         ",\"target_angle\":" + String(gimbal.targetDeg, 1) +
+         ",\"protocol\":{\"tx_count\":" + String(cameraProtocolTxCount()) +
+         ",\"status_rx_count\":" + String(cameraProtocolStatusRxCount()) +
+         ",\"detection_rx_count\":" + String(cameraProtocolDetectionRxCount()) +
+         ",\"tx_age_ms\":" + String(cameraTxAgeMs) +
+         ",\"status_rx_age_ms\":" + String(cameraStatusRxAgeMs) +
+         ",\"detection_rx_age_ms\":" + String(cameraDetectionRxAgeMs) +
+         ",\"last_tx\":\"" + jsonEscape(cameraProtocolLastTxCommand()) +
+         "\",\"last_status\":\"" + jsonEscape(cameraProtocolLastStatus()) +
+         "\",\"last_detection\":\"" + jsonEscape(cameraProtocolLastDetection()) + "\"}}" +
          ",\"motion\":{\"mode\":\"" + String(motion.mode) +
          "\",\"enabled\":" + String(motion.enabled ? "true" : "false") +
          ",\"sitting\":" + String(motion.sitting ? "true" : "false") +

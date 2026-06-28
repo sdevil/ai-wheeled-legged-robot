@@ -19,6 +19,16 @@ void sendCameraTrackSelection(int x, int y, int width, int height,
 void sendCameraTrackDistanceAdjust(int value);
 void sendCameraTrackScan();
 void sendCameraTrackStop();
+void sendCameraPing();
+uint32_t cameraProtocolTxCount();
+uint32_t cameraProtocolStatusRxCount();
+uint32_t cameraProtocolDetectionRxCount();
+unsigned long cameraProtocolLastTxMs();
+unsigned long cameraProtocolLastStatusRxMs();
+unsigned long cameraProtocolLastDetectionRxMs();
+String cameraProtocolLastTxCommand();
+String cameraProtocolLastStatus();
+String cameraProtocolLastDetection();
 String percentEncodeForCamera(const String& input);
 
 #endif

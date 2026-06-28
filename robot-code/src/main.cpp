@@ -198,6 +198,7 @@ void processWebControl() {
       millis() - lastTrackScanRetryMs >= 1000) {
     lastTrackScanRetryMs = millis();
     sendCameraTrackScan();
+    sendCameraPing();
   }
   int legHeightPercent = -1;
   if (consumeWebLegHeightPercent(legHeightPercent)) {
