@@ -542,6 +542,10 @@ export class RobotApi {
   }
 
   async sendTrackUnlock() {
+    return this.sendTrackScan();
+  }
+
+  async sendTrackScan() {
     const ack = this.sendSocketRequest({ type: 'track_unlock' });
     if (ack) return ack;
     try {

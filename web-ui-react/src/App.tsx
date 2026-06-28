@@ -482,6 +482,9 @@ export default function App() {
     try {
       const accepted = await api.sendAction(nextAction);
       if (!accepted && isTrackToggle) setSettingsMessage('Command rejected');
+      if (accepted && isTrackToggle && nextAction === 'track_mode') {
+        await api.sendTrackScan();
+      }
       if (accepted) await new Promise((resolve) => window.setTimeout(resolve, 80));
       await refresh();
     } finally {
