@@ -71,8 +71,8 @@ constexpr char PREF_UI_LANGUAGE[] = "ui_language";
 constexpr char DEFAULT_UI_LANGUAGE[] = "en";
 constexpr char DEFAULT_ROBOT_NAME[] = "WRobot-sdevil";
 constexpr char DEFAULT_CAMERA_RESOLUTION[] = "640x480";
-constexpr char ROBOT_FIRMWARE_VERSION[] = "3.2.100";
-constexpr char ROBOT_FIRMWARE_BUILD[] = "2026-06-28-camera-status-stale-01";
+constexpr char ROBOT_FIRMWARE_VERSION[] = "3.2.101";
+constexpr char ROBOT_FIRMWARE_BUILD[] = "2026-06-28-camera-scan-retry-01";
 constexpr unsigned long CAMERA_STATUS_STALE_MS = 5000;
 constexpr char CONTROL_MODE_WIFI[] = "wifi";
 constexpr char CONTROL_MODE_GAMEPAD[] = "gamepad";
@@ -1899,6 +1899,13 @@ void updateWebCameraDetectionStatus(const String& label, int count) {
   statusCameraDetectLabel = label;
   statusCameraDetectCount = count;
   unlockStatus();
+}
+
+bool isWebCameraScanPending() {
+  lockStatus();
+  const bool pending = statusCameraDetectLabel == "TARGET_SCAN";
+  unlockStatus();
+  return pending;
 }
 
 

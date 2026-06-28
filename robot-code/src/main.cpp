@@ -192,7 +192,13 @@ void processWebControl() {
   static int lastNonZeroWebJoyX = 0;
   static int lastNonZeroWebJoyY = 0;
   static unsigned long webZeroSinceMs = 0;
+  static unsigned long lastTrackScanRetryMs = 0;
   dispatchWebAction(consumeWebRobotAction());
+  if (trace_mode && isWebCameraScanPending() &&
+      millis() - lastTrackScanRetryMs >= 1000) {
+    lastTrackScanRetryMs = millis();
+    sendCameraTrackScan();
+  }
   int legHeightPercent = -1;
   if (consumeWebLegHeightPercent(legHeightPercent)) {
     commandMotion(MotionCommand::legHeightPercent(legHeightPercent),

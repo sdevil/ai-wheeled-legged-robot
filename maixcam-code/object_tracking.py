@@ -681,6 +681,8 @@ def run_object_tracking(resources):
     scan_candidates = []
     last_status_report_ms = 0
     status_report_interval_ms = 2000
+    last_detection_report_ms = 0
+    detection_report_interval_ms = 1000
 
     def receive_track_command(command):
         nonlocal pending_command
@@ -1088,6 +1090,10 @@ def run_object_tracking(resources):
         if detection_label != last_label or detection_count != last_count:
             report_camera_detection(serial_dev, detection_label, detection_count)
             last_label, last_count = detection_label, detection_count
+            last_detection_report_ms = now_ms
+        elif scan_mode and not tracking and now_ms - last_detection_report_ms >= detection_report_interval_ms:
+            report_camera_detection(serial_dev, detection_label, detection_count)
+            last_detection_report_ms = now_ms
 
         if movement_command:
             serial_dev.write_str(movement_command)

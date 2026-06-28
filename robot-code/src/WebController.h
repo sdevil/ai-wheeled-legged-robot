@@ -40,6 +40,7 @@ void updateWebCameraNetworkStatus(const String& state, const String& ip,
                                   const String& firmwareBuild = "",
                                   const String& activeResolution = "");
 void updateWebCameraDetectionStatus(const String& label, int count);
+bool isWebCameraScanPending();
 
 #endif
 
