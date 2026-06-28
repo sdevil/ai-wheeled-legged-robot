@@ -835,6 +835,7 @@ def run_object_tracking(resources):
         detection_label, detection_count = "NO_TARGET", 0
 
         if scan_mode and not tracking:
+            img.draw_string(8, 8, "SCAN ACTIVE", image.COLOR_GREEN)
             if hybrid_detector and hybrid_detector.ready() and frame_count % max(1, HYBRID_SCAN_EVERY_N_FRAMES) == 0:
                 try:
                     scan_candidates = hybrid_detector._collect_candidates(img, "")
@@ -842,9 +843,9 @@ def run_object_tracking(resources):
                     print(f"[WROBOT] scan detect failed: {exc}")
                     scan_candidates = []
             if not hybrid_detector or not hybrid_detector.ready():
-                img.draw_string(8, 8, "SCAN: detector unavailable", image.COLOR_RED)
+                img.draw_string(8, 28, "detector unavailable", image.COLOR_RED)
             elif not scan_candidates:
-                img.draw_string(8, 8, "SCAN: no target", image.COLOR_BLUE)
+                img.draw_string(8, 28, "no target", image.COLOR_BLUE)
             for item in scan_candidates[:8]:
                 x, y, w, h = [int(value) for value in item.box]
                 color = image.COLOR_BLUE if item.family != "face" else image.COLOR_GREEN
