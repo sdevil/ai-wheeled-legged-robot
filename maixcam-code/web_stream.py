@@ -1,7 +1,6 @@
 import socket
 import traceback
 import time
-import urllib.parse
 
 from config import (
     WEB_PREVIEW_ENCODE_INTERVAL_MS,
@@ -92,7 +91,7 @@ class SnapshotServer:
         bind_hosts = []
         if device_ip:
             bind_hosts.append(device_ip)
-        elif self.host:
+        if self.host and self.host not in bind_hosts:
             bind_hosts.append(self.host)
         last_error = None
         for bind_host in bind_hosts:
@@ -305,9 +304,10 @@ class SnapshotServer:
     def _query_value(self, path, name):
         try:
             _, _, query = path.partition("?")
-            for key, values in urllib.parse.parse_qs(query).items():
-                if key == name and values:
-                    return values[0].strip()
+            for item in query.split("&"):
+                key, separator, value = item.partition("=")
+                if separator and _url_decode(key) == name:
+                    return _url_decode(value).strip()
         except Exception:
             pass
         return ""
@@ -349,3 +349,23 @@ class SnapshotServer:
                 pass
         self._server = None
         self._ready = False
+
+
+def _url_decode(value):
+    value = value.replace("+", " ")
+    output = []
+    index = 0
+    while index < len(value):
+        if (
+            value[index] == "%"
+            and index + 2 < len(value)
+        ):
+            try:
+                output.append(chr(int(value[index + 1:index + 3], 16)))
+                index += 3
+                continue
+            except Exception:
+                pass
+        output.append(value[index])
+        index += 1
+    return "".join(output)
