@@ -134,6 +134,26 @@ function targetStatusLabel(label: string, language: UiLanguage) {
   return labels[label] || label;
 }
 
+function cameraOverlayStatus(telemetry: DashboardModel, previewMode: 'stream' | 'snapshot' | 'none') {
+  const label = telemetry.targetLabelRaw || '';
+  if (label === 'TARGET_SCAN') return 'Scanning';
+  if (label === 'TARGET_SELECTED') return 'Selecting';
+  if (label === 'TARGET_INVALID') return 'No Match';
+  if (label.endsWith('_LOCKED') || label === 'PING_PONG_BALL') return 'Locked';
+  if (
+    label.endsWith('_VISIBLE') ||
+    label === 'FACE_VISIBLE' ||
+    label === 'PERSON_VISIBLE' ||
+    label.startsWith('ANIMAL_')
+  ) {
+    return 'Detected';
+  }
+  if (telemetry.cameraState === 'CONNECTED' || telemetry.cameraState === 'READY' || telemetry.cameraState === 'IDLE') {
+    return previewMode === 'stream' ? 'Camera Live' : 'Camera Snapshot';
+  }
+  return telemetry.cameraState || 'Camera';
+}
+
 function isTargetLocked(rawLabel: string) {
   return /_LOCKED$|^LOCKED$/i.test(rawLabel || '');
 }
@@ -231,6 +251,8 @@ const initialTelemetry: DashboardModel = {
   firmwareBuild: '',
   cameraFirmwareVersion: '',
   cameraFirmwareBuild: '',
+  cameraStatusAgeMs: 0,
+  cameraVersionStale: true,
   online: false,
   robotHost: initialHost,
   robotIp: initialHost,
@@ -286,7 +308,6 @@ export default function App() {
   const [settingsMessage, setSettingsMessage] = useState('');
   const [driveSpeed, setDriveSpeed] = useState(100);
   const [gimbalSpeed, setGimbalSpeed] = useState(100);
-  const [trackingTargetProfile, setTrackingTargetProfile] = useState(1);
   const [legHeightDraft, setLegHeightDraft] = useState<number | null>(null);
   const [legLeanDraft, setLegLeanDraft] = useState(0);
   const [drawerOpen, setDrawerOpen] = useState(false);
@@ -663,11 +684,9 @@ export default function App() {
                 onPreviewActiveChange={handleCameraPreviewActiveChange}
                 trackingEnabled={telemetry.activeMode === 'track_mode'}
                 selectTargetLabel={copy.selectTarget}
-                targetProfile={trackingTargetProfile}
-                onTargetProfileChange={setTrackingTargetProfile}
                 targetLocked={isTargetLocked(telemetry.targetLabelRaw)}
                 onTrackSelection={(selection) =>
-                  void api.sendTrackSelection(selection, trackingTargetProfile)
+                  void api.sendTrackSelection(selection)
                 }
                 onTrackUnlock={() => void api.sendTrackUnlock()}
               />
@@ -1199,8 +1218,6 @@ function CameraCard({
   onPreviewActiveChange,
   trackingEnabled,
   selectTargetLabel,
-  targetProfile,
-  onTargetProfileChange,
   targetLocked,
   onTrackSelection,
   onTrackUnlock,
@@ -1210,8 +1227,6 @@ function CameraCard({
   onPreviewActiveChange: (active: boolean) => void;
   trackingEnabled: boolean;
   selectTargetLabel: string;
-  targetProfile: number;
-  onTargetProfileChange: (profile: number) => void;
   targetLocked: boolean;
   onTrackSelection: (selection: TrackSelection) => void;
   onTrackUnlock: () => void;
@@ -1356,13 +1371,13 @@ function CameraCard({
     if (screenWidth < 16 || screenHeight < 16) {
       const centerX = endPoint.x;
       const centerY = endPoint.y;
-      w = targetProfile === 3 ? 1800 : 2600;
-      h = targetProfile === 3 ? 1800 : 2600;
+      w = 2800;
+      h = 2800;
       x = Math.max(0, Math.min(10000 - w, centerX - Math.round(w / 2)));
       y = Math.max(0, Math.min(10000 - h, centerY - Math.round(h / 2)));
     } else {
-      const padX = targetProfile === 3 ? 350 : 800;
-      const padY = targetProfile === 3 ? 350 : 800;
+      const padX = 800;
+      const padY = 800;
       x = Math.max(0, x - padX);
       y = Math.max(0, y - padY);
       w = Math.min(10000 - x, w + padX * 2);
@@ -1492,38 +1507,6 @@ function CameraCard({
 
         {trackingEnabled && previewMode === 'stream' && previewSrc ? (
           <Box
-            component="select"
-            value={targetProfile}
-            onChange={(event) =>
-              onTargetProfileChange(Number((event.target as HTMLSelectElement).value))
-            }
-            onPointerDown={(event) => event.stopPropagation()}
-            onClick={(event) => event.stopPropagation()}
-            aria-label="Tracking target type"
-            sx={{
-              position: 'absolute',
-              top: 10,
-              right: 10,
-              zIndex: 3,
-              height: 28,
-              px: 0.75,
-              borderRadius: 1,
-              border: '1px solid rgba(126,160,214,.45)',
-              bgcolor: alpha('#080b12', 0.78),
-              color: '#fff',
-              fontSize: 11,
-              fontWeight: 700,
-              outline: 'none',
-            }}
-          >
-            <option value={1}>Face</option>
-            <option value={2}>Animal</option>
-            <option value={3}>Ping-pong ball</option>
-          </Box>
-        ) : null}
-
-        {trackingEnabled && previewMode === 'stream' && previewSrc ? (
-          <Box
             sx={{
               position: 'absolute',
               left: '50%',
@@ -1546,13 +1529,7 @@ function CameraCard({
 
         {previewSrc ? (
           <Chip
-            label={
-              telemetry.cameraState === 'CONNECTED'
-                ? previewMode === 'stream'
-                  ? 'Camera Live'
-                  : 'Camera Snapshot'
-                : telemetry.cameraState
-            }
+            label={cameraOverlayStatus(telemetry, previewMode)}
             sx={{
               position: 'absolute',
               top: 10,

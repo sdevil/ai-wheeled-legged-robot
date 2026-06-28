@@ -778,8 +778,6 @@ def run_object_tracking(resources):
                     x, y, w, h = _roi_to_pixels(command, image_width, image_height)
                     roi = [float(x), float(y), float(w), float(h)]
                     requested_family = "face" if requested_profile == 1 else ("animal" if requested_profile == 2 else ("ball" if requested_profile == 3 else ""))
-                    if not requested_family:
-                        raise RuntimeError("Unsupported tracking target profile")
                     semantic = (
                         hybrid_detector.detect(
                             img, roi, requested_family,
@@ -790,6 +788,7 @@ def run_object_tracking(resources):
                     )
                     if semantic is not None:
                         target_family, target_label = semantic.family, semantic.label
+                        requested_profile = _tracking_profile(target_family)
                         semantic_valid_until_ms = now_ms + TRACK_SEMANTIC_VALID_MS
                         print(f"[WROBOT] semantic target: {target_family}/{target_label} score={semantic.score:.2f}")
                     else:

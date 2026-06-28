@@ -530,7 +530,7 @@ export class RobotApi {
 
   async sendTrackSelection(
     selection: { x: number; y: number; w: number; h: number },
-    profile = 1,
+    profile = 0,
   ) {
     const ack = this.sendSocketRequest({ type: 'track_roi', ...selection, profile });
     if (ack) return ack;
