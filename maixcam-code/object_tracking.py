@@ -526,6 +526,8 @@ def _semantic_label(family, label, state):
         return "PING_PONG_BALL"
     if family == "person":
         return "PERSON_LOCKED"
+    if family == "generic":
+        return "TARGET_LOCKED"
     return "TARGET_UNSUPPORTED"
 
 
@@ -556,7 +558,7 @@ def _scan_label(candidates):
     return "TARGET_VISIBLE", len(candidates)
 
 
-def _candidate_from_scan(candidates, roi, requested_family=""):
+def _candidate_from_scan(candidates, roi, requested_family="", require_match=True):
     if not candidates:
         return None
     roi_center = _center(roi)
@@ -581,7 +583,13 @@ def _candidate_from_scan(candidates, roi, requested_family=""):
         return _iou(item.box, roi) * 0.45 + center_match * 0.30 + proximity * 0.20 + item.score * 0.05
 
     best = max(filtered, key=score)
-    return best if score(best) > 0.08 else None
+    if not require_match:
+        return best
+    return best if score(best) > 0.02 else None
+
+
+def _generic_candidate_from_roi(roi):
+    return Detection([float(value) for value in roi], 1.0, "target", "generic")
 
 
 def _tracking_profile(family):
@@ -809,6 +817,12 @@ def run_object_tracking(resources):
                     if semantic is not None:
                         print(f"[WROBOT] selected scan target: {semantic.family}/{semantic.label} score={semantic.score:.2f}")
                     if semantic is None:
+                        semantic = _candidate_from_scan(
+                            scan_candidates, roi, requested_family, require_match=False
+                        )
+                        if semantic is not None:
+                            print(f"[WROBOT] fallback nearest scan target: {semantic.family}/{semantic.label} score={semantic.score:.2f}")
+                    if semantic is None:
                         semantic = (
                             hybrid_detector.detect(
                                 img, roi, requested_family,
@@ -817,6 +831,9 @@ def run_object_tracking(resources):
                             )
                             if hybrid_detector and hybrid_detector.ready() else None
                         )
+                    if semantic is None:
+                        semantic = _generic_candidate_from_roi(roi)
+                        print("[WROBOT] fallback generic ROI target")
                     if semantic is not None:
                         target_family, target_label = semantic.family, semantic.label
                         requested_profile = _tracking_profile(target_family)
@@ -896,7 +913,7 @@ def run_object_tracking(resources):
             detection_label, detection_count = _scan_label(scan_candidates)
 
         if tracking:
-            semantic_identity_required = bool(target_family)
+            semantic_identity_required = bool(target_family and target_family != "generic")
             threshold = DETECTOR_REACQUIRE_SCORE_THRESHOLD if state in (COASTING, REACQUIRING) else DETECTOR_SCORE_THRESHOLD
             candidate = None
             semantic_candidate = None
@@ -926,7 +943,7 @@ def run_object_tracking(resources):
                     semantic_candidate = hybrid_detector.reacquire_global(
                         img, predicted_box, target_family, target_label
                     )
-                elif target_family:
+                elif target_family and target_family != "generic":
                     semantic_candidate = hybrid_detector.reacquire(
                         img, filtered_box, target_family, target_label
                     )
@@ -974,6 +991,14 @@ def run_object_tracking(resources):
                 candidate is None and semantic_identity_required and
                 filtered_box is not None and state == LOCKED and
                 semantic_valid_until_ms != 0 and now_ms <= semantic_valid_until_ms
+            ):
+                candidate = filtered_box
+                score = max(score, DETECTOR_SCORE_THRESHOLD)
+            if (
+                candidate is None and
+                target_family == "generic" and
+                filtered_box is not None and
+                state == LOCKED
             ):
                 candidate = filtered_box
                 score = max(score, DETECTOR_SCORE_THRESHOLD)
