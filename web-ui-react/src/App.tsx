@@ -1451,9 +1451,15 @@ function CameraCard({
             alt="camera preview"
             draggable={false}
             onError={() => {
-              setPreviewMode('none');
-              setPreviewSrc('');
-              setPreviewError('No Video Signal');
+              if (previewMode === 'stream' && snapshotUrl) {
+                setPreviewMode('snapshot');
+                setPreviewSrc(withPreviewNonce(snapshotUrl));
+                setPreviewError('');
+              } else {
+                setPreviewMode('none');
+                setPreviewSrc('');
+                setPreviewError('No Video Signal');
+              }
               onPreviewActiveChange(false);
             }}
             onLoad={() => {

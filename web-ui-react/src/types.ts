@@ -27,6 +27,7 @@ export interface RobotStatus {
   camera_net_state: string;
   camera_net_ip: string;
   camera_net_message: string;
+  camera_url?: string;
   camera_resolution: string;
   camera_detect_label: string;
   camera_detect_count: number;

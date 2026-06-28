@@ -65,8 +65,8 @@ constexpr char PREF_UI_LANGUAGE[] = "ui_language";
 constexpr char DEFAULT_UI_LANGUAGE[] = "en";
 constexpr char DEFAULT_ROBOT_NAME[] = "WRobot-sdevil";
 constexpr char DEFAULT_CAMERA_RESOLUTION[] = "640x480";
-constexpr char ROBOT_FIRMWARE_VERSION[] = "3.2.106";
-constexpr char ROBOT_FIRMWARE_BUILD[] = "2026-06-29-auto-target-lock-ui-01";
+constexpr char ROBOT_FIRMWARE_VERSION[] = "3.2.107";
+constexpr char ROBOT_FIRMWARE_BUILD[] = "2026-06-29-camera-url-recovery-01";
 constexpr unsigned long CAMERA_STATUS_STALE_MS = 5000;
 constexpr char CONTROL_MODE_WIFI[] = "wifi";
 constexpr char CONTROL_MODE_GAMEPAD[] = "gamepad";
@@ -662,6 +662,7 @@ void sendJsonStatus() {
   String cameraNetState;
   String cameraNetIp;
   String cameraNetMessage;
+  String cameraStreamUrl;
   String cameraFirmwareVersion;
   String cameraFirmwareBuild;
   unsigned long cameraLastSeenMs;
@@ -689,6 +690,7 @@ void sendJsonStatus() {
   cameraNetState = statusCameraNetState;
   cameraNetIp = statusCameraNetIp;
   cameraNetMessage = statusCameraNetMessage;
+  cameraStreamUrl = statusCameraStreamUrl;
   cameraFirmwareVersion = statusCameraFirmwareVersion;
   cameraFirmwareBuild = statusCameraFirmwareBuild;
   cameraLastSeenMs = statusCameraLastSeenMs;
@@ -732,6 +734,7 @@ void sendJsonStatus() {
                 ",\"camera_net_state\":\"" + jsonEscape(cameraNetState) + "\"" +
                 ",\"camera_net_ip\":\"" + jsonEscape(cameraNetIp) + "\"" +
                 ",\"camera_net_message\":\"" + jsonEscape(cameraNetMessage) + "\"" +
+                ",\"camera_url\":\"" + jsonEscape(cameraStreamUrl) + "\"" +
                 ",\"camera_firmware_version\":\"" + jsonEscape(cameraFirmwareVersion) + "\"" +
                 ",\"camera_firmware_build\":\"" + jsonEscape(cameraFirmwareBuild) + "\"" +
                 ",\"camera_status_age_ms\":" + String(cameraStatusAgeMs) +

@@ -128,7 +128,7 @@ export class RobotApi {
       void this.ensureSocket();
       const cameraUrl = data.camera_net_ip
         ? `http://${data.camera_net_ip}:8080/stream.mjpg`
-        : cameraUrlOverride;
+        : data.camera_url || cameraUrlOverride;
       return {
         bootId: data.boot_id || 0,
         firmwareVersion: data.firmware_version || '',
