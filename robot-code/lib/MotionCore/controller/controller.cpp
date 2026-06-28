@@ -266,62 +266,107 @@ void controller::boot_loop(uint32_t tick)
     }
 }
 
-void controller::sit_loop(uint32_t tick)  // 坐下状态循环
+void controller::sit_loop(uint32_t tick)
 {
-    switch(fsm_state_machine.sit)       // 坐下状态
+    const uint32_t retract_ms = 900;
+    const uint32_t settle_ms = 180;
+    const uint32_t tilt_timeout_ms = 3500;
+    const float sit_low_height = 52.0f;
+
+    switch(fsm_state_machine.sit)
     {
-        case fsm::sit_state::PREPARE:  // 坐下状态准备
+        case fsm::sit_state::PREPARE:
             sit_mode_flag = 1.0f;
             enable_steering = 0;
-            enable_balance = 0;
+            enable_balance = 1;
+            enable_motor = 1;
+            sit_timer = 0;
+            sit_retract_started = 0;
+            sit_start_leg_height = leg_height_base;
+            roll_adjust = 0.0f;
+            roll_adjust_target = 0.0f;
 
-            //sts3032.set(SERVO_LEFT, SERVO_LEFT_MIN, 450, 250);  
-            //sts3032.set(SERVO_RIGHT, SERVO_RIGHT_MIN, 450, 250);
-
-            sts3032.set_torque_switch(SERVO_LEFT, 2);
-            sts3032.set_torque_switch(SERVO_RIGHT, 2);
+            sts3032.set_torque_switch(SERVO_LEFT, 1);
+            sts3032.set_torque_switch(SERVO_RIGHT, 1);
 
             fsm_state_machine.sit = fsm::sit_state::MOVING;
             break;
 
         case fsm::sit_state::MOVING:
-            left_motor.move(-0.2f);   // 坐下状态移动
-            right_motor.move(-0.2f);  // 坐下状态移动
+            sit_timer += tick;
+            enable_steering = 0;
 
-            if(fabsf(mpu6050_dev.angle[1]) >= 0.25f || (sit_timer += tick) >= 5000)
+            if(sit_timer <= retract_ms)
             {
-                enable_motor = 0;    
+                enable_balance = 1;
+                enable_motor = 1;
+                float t = constrain((float)sit_timer / (float)retract_ms, 0.0f, 1.0f);
+                t = t * t * (3.0f - 2.0f * t);
+                leg_height_base = sit_start_leg_height + (sit_low_height - sit_start_leg_height) * t;
+                leg_loop();
+                break;
+            }
+
+            if(sit_timer <= retract_ms + settle_ms)
+            {
+                enable_balance = 1;
+                enable_motor = 1;
+                leg_height_base = sit_low_height;
+                leg_loop();
+                break;
+            }
+
+            if(!sit_retract_started)
+            {
+                leg_height_base = sit_low_height;
+                sts3032.set_torque_switch(SERVO_LEFT, 2);
+                sts3032.set_torque_switch(SERVO_RIGHT, 2);
+                sit_retract_started = 1;
+            }
+
+            enable_balance = 0;
+            enable_motor = 1;
+            left_motor.move(-0.16f);
+            right_motor.move(-0.16f);
+
+            if(fabsf(mpu6050_dev.angle[1]) >= 0.25f ||
+               sit_timer >= retract_ms + settle_ms + tilt_timeout_ms)
+            {
+                enable_motor = 0;
+                left_motor.move(0.0f);
+                right_motor.move(0.0f);
+                sts3032.set_torque_switch(SERVO_LEFT, 2);
+                sts3032.set_torque_switch(SERVO_RIGHT, 2);
                 fsm_state_machine.sit = fsm::sit_state::DONE;
             }
             break;
 
-        case fsm::sit_state::DONE:  
-            if(buttons & BTN_LS)     // 坐下状态保持
+        case fsm::sit_state::DONE:
+            if(buttons & BTN_LS)
             {
                 sts3032.set_torque_switch(SERVO_LEFT, 0);
                 sts3032.set_torque_switch(SERVO_RIGHT, 0);
             }
 
-            if(buttons & BTN_RB)     // 如果按下右肩键，则准备退出坐下状态
+            if(buttons & BTN_RB)
             {
-                //sts3032.set(SERVO_LEFT, SERVO_LEFT_MIN, 450, 250);
-                //sts3032.set(SERVO_RIGHT, SERVO_RIGHT_MIN, 450, 250);
-                //sts3032.move();
-                sit_timer = 0;                       // 重置坐下计时器
-                base_components.reset();             // 重置基础组件    
-                begin_balance_recover();             // 开始平衡恢复
-                fsm_state_machine.sit = fsm::sit_state::EXIT_PREPARE;        // 坐下状态退出准备
+                sts3032.set_torque_switch(SERVO_LEFT, 1);
+                sts3032.set_torque_switch(SERVO_RIGHT, 1);
+                sit_timer = 0;
+                base_components.reset();
+                begin_balance_recover();
+                fsm_state_machine.sit = fsm::sit_state::EXIT_PREPARE;
             }
             break;
 
-        case fsm::sit_state::EXIT_PREPARE:   // 坐下状态退出准备
+        case fsm::sit_state::EXIT_PREPARE:
             if(balance_recover_prepare_loop(tick))
             {
                 fsm_state_machine.sit = fsm::sit_state::EXIT_RECOVER;
             }
             break;
 
-        case fsm::sit_state::EXIT_RECOVER:   // 坐下状态退出恢复
+        case fsm::sit_state::EXIT_RECOVER:
             if(balance_recover_loop(tick))
             {
                 sit_mode_flag = 0.0f;
@@ -329,11 +374,10 @@ void controller::sit_loop(uint32_t tick)  // 坐下状态循环
             }
             break;
 
-        case fsm::sit_state::EXIT:  // 坐下状态退出
+        case fsm::sit_state::EXIT:
             break;
     }
 }
-
 void controller::leg_loop()
 {
     if((buttons & BTN_RIGHT) && !(buttons & ~BTN_RIGHT)){roll_adjust += 0.025f;}
@@ -667,3 +711,4 @@ void controller::motor_update_proc(uint32_t tick)
     left_motor.setPhaseVoltage(left_motor.voltage.q, left_motor.voltage.d, left_motor.electrical_angle);
     right_motor.setPhaseVoltage(right_motor.voltage.q, right_motor.voltage.d, right_motor.electrical_angle);
 }
+
