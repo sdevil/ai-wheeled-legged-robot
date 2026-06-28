@@ -365,6 +365,7 @@ void setup() {
   pinMode(LED_BAT, OUTPUT);
   digitalWrite(LED_BAT, kModeLedOffLevel);
   Serial.begin(115200);
+  initCameraSerial();
   delay(300);
   recordDiagnosticEvent("system", "boot");
 

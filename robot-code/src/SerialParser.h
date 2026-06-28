@@ -4,6 +4,7 @@
 #include <Arduino.h>
 
 void serialReceiveProcess();
+void initCameraSerial();
 void parseSetRobotMode(char* cmd);
 void parseServoAngleCommand(char* cmd);
 void parseCameraDeviationCommand(char* cmd);
@@ -29,6 +30,9 @@ unsigned long cameraProtocolLastDetectionRxMs();
 String cameraProtocolLastTxCommand();
 String cameraProtocolLastStatus();
 String cameraProtocolLastDetection();
+String cameraProtocolUartMode();
+int cameraProtocolDedicatedRxPin();
+int cameraProtocolDedicatedTxPin();
 String percentEncodeForCamera(const String& input);
 
 #endif

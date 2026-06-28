@@ -8,9 +8,17 @@
 #include "motion/MotionCommandGateway.h"
 
 namespace {
-char serialBuffer[512];
-uint8_t serialIndex = 0;
-bool serialFrameOverflow = false;
+constexpr int CAMERA_UART_RX_PIN = 36;
+constexpr int CAMERA_UART_TX_PIN = 5;
+constexpr uint32_t CAMERA_UART_BAUD = 115200;
+HardwareSerial cameraSerial(1);
+struct SerialFrameBuffer {
+  char data[512];
+  uint8_t index;
+  bool overflow;
+};
+SerialFrameBuffer usbFrame = {};
+SerialFrameBuffer cameraFrame = {};
 uint32_t cameraTxCount = 0;
 uint32_t cameraStatusRxCount = 0;
 uint32_t cameraDetectionRxCount = 0;
@@ -20,6 +28,7 @@ unsigned long cameraLastDetectionRxMs = 0;
 String cameraLastTxCommand;
 String cameraLastStatus;
 String cameraLastDetection;
+String cameraLastRxSource;
 
 String trimToken(const char* value) {
   String result = String(value ? value : "");
@@ -41,49 +50,70 @@ const char* trackingStateText(TrackObservationState state) {
 }
 
 void sendCameraCommand(const String& command, const String& diagnosticName) {
+  cameraSerial.println(command);
   Serial.println(command);
   cameraTxCount++;
   cameraLastTxMs = millis();
   cameraLastTxCommand = diagnosticName;
 }
-}  // namespace
 
-void serialReceiveProcess() {
-  uint16_t budget = 96;
-  while (budget-- > 0 && Serial.available()) {
-    char c = Serial.read();
+void parseSerialFrame(char* frame, const char* source) {
+  if (strstr(frame, "MODE:") != nullptr) {
+    parseSetRobotMode(frame);
+  } else if (strstr(frame, "S1:") != nullptr && strstr(frame, "S2:") != nullptr) {
+    parseServoAngleCommand(frame);
+  } else if (strstr(frame, "TRK:") != nullptr) {
+    cameraLastRxSource = source;
+    parseTrackingObservationCommand(frame);
+  } else if (strstr(frame, "DX:") != nullptr && strstr(frame, "DY:") != nullptr) {
+    cameraLastRxSource = source;
+    parseCameraDeviationCommand(frame);
+  } else if (strstr(frame, "CAMSTAT:") != nullptr) {
+    cameraLastRxSource = source;
+    parseCameraStatusCommand(frame);
+  } else if (strstr(frame, "CAMDET:") != nullptr) {
+    cameraLastRxSource = source;
+    parseCameraDetectionCommand(frame);
+  } else if (strchr(frame, '=') != nullptr) {
+    parseSingleParam(frame);
+  }
+}
+
+void pollSerialStream(Stream& stream, SerialFrameBuffer& buffer,
+                      const char* source, uint16_t budget) {
+  while (budget-- > 0 && stream.available()) {
+    const char c = static_cast<char>(stream.read());
     if (c == '\n' || c == '\r' || c == ';') {
-      if (serialFrameOverflow) {
-        serialFrameOverflow = false;
-        serialIndex = 0;
+      if (buffer.overflow) {
+        buffer.overflow = false;
+        buffer.index = 0;
         continue;
       }
-      serialBuffer[serialIndex] = '\0';
-      if (serialIndex > 0) {
-        if (strstr(serialBuffer, "MODE:") != nullptr) {
-          parseSetRobotMode(serialBuffer);
-        } else if (strstr(serialBuffer, "S1:") != nullptr && strstr(serialBuffer, "S2:") != nullptr) {
-          parseServoAngleCommand(serialBuffer);
-        } else if (strstr(serialBuffer, "TRK:") != nullptr) {
-          parseTrackingObservationCommand(serialBuffer);
-        } else if (strstr(serialBuffer, "DX:") != nullptr && strstr(serialBuffer, "DY:") != nullptr) {
-          parseCameraDeviationCommand(serialBuffer);
-        } else if (strstr(serialBuffer, "CAMSTAT:") != nullptr) {
-          parseCameraStatusCommand(serialBuffer);
-        } else if (strstr(serialBuffer, "CAMDET:") != nullptr) {
-          parseCameraDetectionCommand(serialBuffer);
-        } else if (strchr(serialBuffer, '=') != nullptr) {
-          parseSingleParam(serialBuffer);
-        }
-      }
-      serialIndex = 0;
-    } else if (!serialFrameOverflow && serialIndex < sizeof(serialBuffer) - 1) {
-      serialBuffer[serialIndex++] = c;
+      buffer.data[buffer.index] = '\0';
+      if (buffer.index > 0) parseSerialFrame(buffer.data, source);
+      buffer.index = 0;
+    } else if (!buffer.overflow && buffer.index < sizeof(buffer.data) - 1) {
+      buffer.data[buffer.index++] = c;
     } else {
-      serialFrameOverflow = true;
-      serialIndex = 0;
+      buffer.overflow = true;
+      buffer.index = 0;
     }
   }
+}
+}  // namespace
+
+void initCameraSerial() {
+  cameraSerial.begin(CAMERA_UART_BAUD, SERIAL_8N1,
+                     CAMERA_UART_RX_PIN, CAMERA_UART_TX_PIN);
+  recordDiagnosticEvent(
+      "camera",
+      String("uart dedicated rx=") + CAMERA_UART_RX_PIN +
+          " tx=" + CAMERA_UART_TX_PIN);
+}
+
+void serialReceiveProcess() {
+  pollSerialStream(cameraSerial, cameraFrame, "uart1", 160);
+  pollSerialStream(Serial, usbFrame, "uart0", 64);
 }
 
 void parseSetRobotMode(char* cmd) {
@@ -350,3 +380,9 @@ unsigned long cameraProtocolLastDetectionRxMs() { return cameraLastDetectionRxMs
 String cameraProtocolLastTxCommand() { return cameraLastTxCommand; }
 String cameraProtocolLastStatus() { return cameraLastStatus; }
 String cameraProtocolLastDetection() { return cameraLastDetection; }
+String cameraProtocolUartMode() {
+  return String("dual:uart1(rx") + CAMERA_UART_RX_PIN + ",tx" +
+         CAMERA_UART_TX_PIN + ")+uart0";
+}
+int cameraProtocolDedicatedRxPin() { return CAMERA_UART_RX_PIN; }
+int cameraProtocolDedicatedTxPin() { return CAMERA_UART_TX_PIN; }
