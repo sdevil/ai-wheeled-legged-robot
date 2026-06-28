@@ -14,6 +14,7 @@ class CameraGimbalController {
   void begin();
   void update();
   void pitchDelta(int deltaDeg);
+  void trackVertical(int normalizedErrorY, bool locked, int confidence);
   void resetPose();
   CameraGimbalTelemetry telemetry() const;
 
@@ -21,6 +22,7 @@ class CameraGimbalController {
   float angleDeg_ = 105.0f;
   float targetDeg_ = 105.0f;
   uint32_t lastUpdateMs_ = 0;
+  uint32_t lastTrackPitchMs_ = 0;
   bool calibrationActive_ = false;
   uint32_t calibrationStartedMs_ = 0;
 };

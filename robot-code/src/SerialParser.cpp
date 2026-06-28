@@ -182,6 +182,9 @@ void parseTrackingObservationCommand(char* cmd) {
   observation.rawScore = rawScorePtr != nullptr ? atoi(rawScorePtr + 3) : confidence;
   observation.velocityX = velocityXPtr != nullptr ? atoi(velocityXPtr + 3) : 0;
   observation.velocityY = velocityYPtr != nullptr ? atoi(velocityYPtr + 3) : 0;
+  cameraGimbal().trackVertical(normalizedY,
+                               state == TrackObservationState::Locked,
+                               observation.rawScore);
   motionGateway().dispatch(observation,
                            String("camera:track:") + trackingStateText(state));
 }

@@ -71,8 +71,8 @@ constexpr char PREF_UI_LANGUAGE[] = "ui_language";
 constexpr char DEFAULT_UI_LANGUAGE[] = "en";
 constexpr char DEFAULT_ROBOT_NAME[] = "WRobot-sdevil";
 constexpr char DEFAULT_CAMERA_RESOLUTION[] = "640x480";
-constexpr char ROBOT_FIRMWARE_VERSION[] = "3.2.98";
-constexpr char ROBOT_FIRMWARE_BUILD[] = "2026-06-28-track-scan-ui-01";
+constexpr char ROBOT_FIRMWARE_VERSION[] = "3.2.99";
+constexpr char ROBOT_FIRMWARE_BUILD[] = "2026-06-28-camera-gimbal-track-01";
 constexpr char CONTROL_MODE_WIFI[] = "wifi";
 constexpr char CONTROL_MODE_GAMEPAD[] = "gamepad";
 

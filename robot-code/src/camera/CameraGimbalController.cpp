@@ -12,6 +12,10 @@ constexpr float kCameraSlewDegPerSecond = 70.0f;
 constexpr uint32_t kCameraCalibrationHighMs = 1200;
 constexpr uint32_t kCameraCalibrationLowMs = 3000;
 constexpr uint32_t kCameraCalibrationFinishMs = 4500;
+constexpr uint32_t kTrackPitchIntervalMs = 24;
+constexpr int kTrackPitchSafeError = 333;
+constexpr int kTrackPitchStepDeg = 2;
+constexpr int kTrackPitchMinConfidence = 450;
 
 float approach(float current, float target, float maximumStep) {
   if (current < target) return min(current + maximumStep, target);
@@ -73,6 +77,27 @@ void CameraGimbalController::pitchDelta(int deltaDeg) {
   targetDeg_ = constrain(targetDeg_ + deltaDeg,
                          (float)kCameraMinDeg,
                          (float)kCameraMaxDeg);
+}
+
+void CameraGimbalController::trackVertical(int normalizedErrorY, bool locked,
+                                           int confidence) {
+  if (calibrationActive_ || !locked || confidence < kTrackPitchMinConfidence) {
+    return;
+  }
+
+  if (abs(normalizedErrorY) <= kTrackPitchSafeError) {
+    return;
+  }
+
+  const uint32_t now = millis();
+  if (now - lastTrackPitchMs_ < kTrackPitchIntervalMs) {
+    return;
+  }
+  lastTrackPitchMs_ = now;
+
+  const int delta = normalizedErrorY > 0 ? -kTrackPitchStepDeg
+                                         : kTrackPitchStepDeg;
+  pitchDelta(delta);
 }
 
 void CameraGimbalController::resetPose() {
