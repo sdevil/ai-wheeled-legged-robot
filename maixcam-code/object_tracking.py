@@ -688,6 +688,13 @@ def run_object_tracking(resources):
         nonlocal pending_command
         pending_command = command
 
+    if preview_server is not None:
+        try:
+            preview_server.set_command_handler(receive_track_command)
+            print("[WROBOT] web command handler ready")
+        except Exception as exc:
+            print(f"[WROBOT] web command handler failed: {exc}")
+
     detector_status = "hybrid" if hybrid_detector and hybrid_detector.ready() else "detector_unavailable"
     report_camera_status(
         serial_dev,

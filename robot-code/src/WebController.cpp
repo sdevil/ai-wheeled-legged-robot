@@ -65,8 +65,8 @@ constexpr char PREF_UI_LANGUAGE[] = "ui_language";
 constexpr char DEFAULT_UI_LANGUAGE[] = "en";
 constexpr char DEFAULT_ROBOT_NAME[] = "WRobot-sdevil";
 constexpr char DEFAULT_CAMERA_RESOLUTION[] = "640x480";
-constexpr char ROBOT_FIRMWARE_VERSION[] = "3.2.104";
-constexpr char ROBOT_FIRMWARE_BUILD[] = "2026-06-28-dedicated-camera-uart-01";
+constexpr char ROBOT_FIRMWARE_VERSION[] = "3.2.105";
+constexpr char ROBOT_FIRMWARE_BUILD[] = "2026-06-29-camera-http-command-fallback-01";
 constexpr unsigned long CAMERA_STATUS_STALE_MS = 5000;
 constexpr char CONTROL_MODE_WIFI[] = "wifi";
 constexpr char CONTROL_MODE_GAMEPAD[] = "gamepad";
@@ -396,6 +396,10 @@ void handleDiagnostics() {
          ",\"uart_mode\":\"" + jsonEscape(cameraProtocolUartMode()) +
          "\",\"dedicated_rx_pin\":" + String(cameraProtocolDedicatedRxPin()) +
          ",\"dedicated_tx_pin\":" + String(cameraProtocolDedicatedTxPin()) +
+         ",\"http_tx_count\":" + String(cameraProtocolHttpTxCount()) +
+         ",\"last_http_code\":" + String(cameraProtocolLastHttpCode()) +
+         ",\"last_http\":\"" + jsonEscape(cameraProtocolLastHttpUrl()) +
+         "\"" +
          ",\"status_rx_count\":" + String(cameraProtocolStatusRxCount()) +
          ",\"detection_rx_count\":" + String(cameraProtocolDetectionRxCount()) +
          ",\"tx_age_ms\":" + String(cameraTxAgeMs) +

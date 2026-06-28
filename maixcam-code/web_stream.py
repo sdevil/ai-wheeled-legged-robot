@@ -1,6 +1,7 @@
 import socket
 import traceback
 import time
+import urllib.parse
 
 from config import (
     WEB_PREVIEW_ENCODE_INTERVAL_MS,
@@ -69,10 +70,14 @@ class SnapshotServer:
         self._pending_stream_data = None
         self._pending_stream_offset = 0
         self._next_stream_data = None
+        self._command_handler = None
         print(
             f"[WEB] profile: {resolution}, interval={self.encode_interval_ms}ms, "
             f"quality={self.jpeg_quality}"
         )
+
+    def set_command_handler(self, handler):
+        self._command_handler = handler
 
     def start(self, device_ip=""):
         if not self.enabled:
@@ -163,6 +168,8 @@ class SnapshotServer:
                 self._send_response(client, 200, b"text/html; charset=utf-8", self._html)
             elif path == "/ping":
                 self._send_response(client, 200, b"text/plain; charset=utf-8", b"pong")
+            elif path.startswith("/api/command"):
+                self._handle_command(client, path)
             elif path.startswith(self.stream_path):
                 self._attach_stream_client(client)
                 keep_open = True
@@ -184,6 +191,21 @@ class SnapshotServer:
             self._send_response(client, 503, b"text/plain; charset=utf-8", b"No Video Signal")
             return
         self._send_response(client, 200, b"image/jpeg", self._latest_jpeg)
+
+    def _handle_command(self, client, path):
+        command = self._query_value(path, "cmd")
+        if not command:
+            self._send_response(client, 400, b"application/json", b'{"ok":false,"error":"missing cmd"}')
+            return
+        if self._command_handler is None:
+            self._send_response(client, 503, b"application/json", b'{"ok":false,"error":"handler unavailable"}')
+            return
+        try:
+            self._command_handler(command)
+            self._send_response(client, 200, b"application/json", b'{"ok":true}')
+        except Exception as exc:
+            print(f"[WEB] command failed: {exc}")
+            self._send_response(client, 500, b"application/json", b'{"ok":false,"error":"command failed"}')
 
     def _attach_stream_client(self, client):
         self._close_stream_client()
@@ -279,6 +301,16 @@ class SnapshotServer:
         except Exception:
             pass
         return "/"
+
+    def _query_value(self, path, name):
+        try:
+            _, _, query = path.partition("?")
+            for key, values in urllib.parse.parse_qs(query).items():
+                if key == name and values:
+                    return values[0].strip()
+        except Exception:
+            pass
+        return ""
 
     def _encode_jpeg(self, img):
         for method_name in ("to_jpeg", "to_jpg"):

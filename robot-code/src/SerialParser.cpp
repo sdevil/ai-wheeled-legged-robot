@@ -1,5 +1,8 @@
 #include "SerialParser.h"
 
+#include <HTTPClient.h>
+#include <WiFi.h>
+
 #include "Diagnostics.h"
 #include "PreferencesManager.h"
 #include "WebController.h"
@@ -11,6 +14,7 @@ namespace {
 constexpr int CAMERA_UART_RX_PIN = 36;
 constexpr int CAMERA_UART_TX_PIN = 5;
 constexpr uint32_t CAMERA_UART_BAUD = 115200;
+constexpr char PREF_CAMERA_URL[] = "cam_stream_url";
 HardwareSerial cameraSerial(1);
 struct SerialFrameBuffer {
   char data[512];
@@ -29,12 +33,16 @@ String cameraLastTxCommand;
 String cameraLastStatus;
 String cameraLastDetection;
 String cameraLastRxSource;
+uint32_t cameraHttpTxCount = 0;
+int cameraLastHttpCode = 0;
+String cameraLastHttpUrl;
 
 String trimToken(const char* value) {
   String result = String(value ? value : "");
   result.trim();
   return result;
 }
+void sendCameraHttpCommand(const String& command, const String& diagnosticName);
 
 const char* trackingStateText(TrackObservationState state) {
   switch (state) {
@@ -55,6 +63,7 @@ void sendCameraCommand(const String& command, const String& diagnosticName) {
   cameraTxCount++;
   cameraLastTxMs = millis();
   cameraLastTxCommand = diagnosticName;
+  sendCameraHttpCommand(command, diagnosticName);
 }
 
 void parseSerialFrame(char* frame, const char* source) {
@@ -99,6 +108,34 @@ void pollSerialStream(Stream& stream, SerialFrameBuffer& buffer,
       buffer.index = 0;
     }
   }
+}
+
+String cameraCommandBaseUrl() {
+  String url = getPrefString(PREF_CAMERA_URL, "");
+  url.trim();
+  if (url.isEmpty()) return "";
+  if (!url.startsWith("http://")) return "";
+  const int schemeEnd = url.indexOf("://");
+  const int pathStart = url.indexOf('/', schemeEnd + 3);
+  if (pathStart < 0) return url;
+  return url.substring(0, pathStart);
+}
+
+void sendCameraHttpCommand(const String& command, const String& diagnosticName) {
+  if (WiFi.status() != WL_CONNECTED) return;
+  const String baseUrl = cameraCommandBaseUrl();
+  if (baseUrl.isEmpty()) return;
+  HTTPClient http;
+  const String url = baseUrl + "/api/command?cmd=" + percentEncodeForCamera(command);
+  cameraLastHttpUrl = diagnosticName;
+  if (!http.begin(url)) {
+    cameraLastHttpCode = -1000;
+    return;
+  }
+  http.setTimeout(180);
+  cameraLastHttpCode = http.GET();
+  http.end();
+  cameraHttpTxCount++;
 }
 }  // namespace
 
@@ -380,6 +417,9 @@ unsigned long cameraProtocolLastDetectionRxMs() { return cameraLastDetectionRxMs
 String cameraProtocolLastTxCommand() { return cameraLastTxCommand; }
 String cameraProtocolLastStatus() { return cameraLastStatus; }
 String cameraProtocolLastDetection() { return cameraLastDetection; }
+uint32_t cameraProtocolHttpTxCount() { return cameraHttpTxCount; }
+int cameraProtocolLastHttpCode() { return cameraLastHttpCode; }
+String cameraProtocolLastHttpUrl() { return cameraLastHttpUrl; }
 String cameraProtocolUartMode() {
   return String("dual:uart1(rx") + CAMERA_UART_RX_PIN + ",tx" +
          CAMERA_UART_TX_PIN + ")+uart0";
