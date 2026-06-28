@@ -25,6 +25,54 @@ static float apply_axis_deadband(float value, float deadband)
     return (value > 0.0f ? 1.0f : -1.0f) * magnitude;
 }
 
+namespace {
+constexpr uint32_t kStandPrepareMs = 350;
+constexpr uint32_t kStandUprightHoldMs = 40;
+constexpr uint32_t kStandReadyHoldMs = 70;
+constexpr uint32_t kStandMinimumRecoverMs = 0;
+constexpr uint32_t kStandMaximumRecoverMs = 1200;
+constexpr uint32_t kStandLegRiseMs = 1;
+constexpr float kStandPitchBiasRad = -0.12f;
+constexpr float kStandOutputBlendSeconds = 0.30f;
+constexpr float kStandYawKp = 0.0f;
+constexpr float kStandYawRateLimit = 0.0f;
+constexpr uint32_t kIdleHoldSettleMs = 700;
+constexpr float kIdleHoldSettleVelocityMps = 0.055f;
+constexpr float kIdlePositionDeadbandM = 0.020f;
+constexpr float kIdlePositionKp = 0.32f;
+constexpr float kIdlePositionMaxSpeedMps = 0.012f;
+constexpr float kIdleVelocityDamping = 0.70f;
+constexpr float kIdleVelocityDampingMaxMps = 0.060f;
+constexpr float kIdleYawKp = 0.45f;
+constexpr float kIdleYawMaxRate = 0.06f;
+constexpr float kIdleRelocationThresholdM = 0.08f;
+constexpr bool kIdleHoldEnabled = false;
+constexpr float kSoftStandFallbackLegHeight = 30.0f - 40.0f / 8.4f;
+constexpr float kLegHeightBaseMin = -4.0f;
+constexpr float kLegHeightBaseMax = 52.0f;
+constexpr float kLegHeightBalanceMin = -1.0f;
+constexpr float kLegHeightBalanceMax = 49.0f;
+
+float smoothstep01(float value)
+{
+    value = constrain(value, 0.0f, 1.0f);
+    return value * value * (3.0f - 2.0f * value);
+}
+
+float estimate_current_leg_height_base()
+{
+    const int16_t left = sts_servo_state[0].position;
+    const int16_t right = sts_servo_state[1].position;
+    const bool valid = left > 1000 && left < 3000 && right > 1000 && right < 3000;
+    if(!valid){return kSoftStandFallbackLegHeight;}
+
+    const float average_offset =
+        (fabsf((float)left - (float)SERVO_CENTER) +
+         fabsf((float)right - (float)SERVO_CENTER)) * 0.5f;
+    return constrain(30.0f - average_offset / 8.4f, kLegHeightBaseMin, kLegHeightBaseMax);
+}
+}
+
 controller::controller()
 {
     fsm_state_machine.bind(*this);
@@ -37,7 +85,25 @@ void controller::begin_balance_recover()
     balance_recover_active = 1;
     balance_recover_prepare_timer = 0;
     balance_recover_timer = 0;
+    balance_recover_last_elapsed = 0;
     balance_recover_ready_timer = 0;
+    balance_recover_upright_timer = 0;
+    balance_recover_leg_rise_timer = 0;
+    balance_recover_leg_rise_started = 0;
+    balance_recover_start_leg_height = estimate_current_leg_height_base();
+    balance_recover_target_leg_height = balance_recover_start_leg_height;
+    balance_recover_origin_position = lqi_param.state.avg_linear_pos;
+    balance_recover_origin_yaw = lqi_param.state.yaw_angle;
+    balance_recover_max_displacement = 0.0f;
+    balance_recover_min_signed_displacement = 0.0f;
+    balance_recover_max_signed_displacement = 0.0f;
+    balance_recover_peak_time = 0;
+    balance_recover_displacement = 0.0f;
+    balance_recover_position_correction = 0.0f;
+    balance_recover_yaw_correction = 0.0f;
+    balance_idle_hold_active = 0;
+    balance_idle_hold_settle_timer = 0;
+    leg_height_base = balance_recover_start_leg_height;
 }
 
 bool controller::balance_recover_prepare_loop(uint32_t tick)
@@ -46,7 +112,7 @@ bool controller::balance_recover_prepare_loop(uint32_t tick)
     enable_balance = 0;
     enable_motor = 0;
 
-    if((balance_recover_prepare_timer += tick) < 350)
+    if((balance_recover_prepare_timer += tick) < kStandPrepareMs)
     {
         return false;
     }
@@ -55,24 +121,95 @@ bool controller::balance_recover_prepare_loop(uint32_t tick)
     balance_recover_timer = 0;
     balance_recover_ready_timer = 0;
     base_components.reset_motion_reference();
+    balance_recover_origin_position = lqi_param.state.avg_linear_pos;
+    balance_recover_origin_yaw = lqi_param.state.yaw_angle;
+    balance_recover_max_displacement = 0.0f;
+    balance_recover_min_signed_displacement = 0.0f;
+    balance_recover_max_signed_displacement = 0.0f;
+    balance_recover_peak_time = 0;
+    balance_recover_displacement = 0.0f;
+    balance_recover_position_correction = 0.0f;
+    balance_recover_yaw_correction = 0.0f;
     return true;
 }
 
 bool controller::balance_recover_loop(uint32_t tick)
 {
-    const float pitch_ready = 0.16f;
-    const float pitch_rate_ready = 1.2f;
-    const uint32_t min_recover_ms = 250;
-    const uint32_t ready_hold_ms = 140;
-    const uint32_t max_recover_ms = 2500;
+    const float pitch_upright = 0.24f;
+    const float pitch_rate_upright = 2.2f;
+    const float pitch_ready = 0.22f;
+    const float pitch_rate_ready = 2.0f;
+    const float pitch_error = mpu6050_dev.angle[1] - kStandPitchBiasRad;
 
     enable_steering = 0;
     enable_balance = 1;
     enable_motor = 1;
-    leg_loop();
 
     balance_recover_timer += tick;
-    if(fabsf(mpu6050_dev.angle[1]) < pitch_ready && fabsf(mpu6050_dev.gyro[1]) < pitch_rate_ready)
+    const bool upright =
+        fabsf(pitch_error) < pitch_upright &&
+        fabsf(mpu6050_dev.gyro[1]) < pitch_rate_upright;
+    if(!balance_recover_leg_rise_started)
+    {
+        leg_height_base = balance_recover_start_leg_height;
+        if(upright)
+        {
+            balance_recover_upright_timer += tick;
+            if(balance_recover_upright_timer >= kStandUprightHoldMs)
+            {
+                balance_recover_leg_rise_started = 1;
+                balance_recover_leg_rise_timer = 0;
+                balance_recover_ready_timer = 0;
+            }
+        }
+        else
+        {
+            balance_recover_upright_timer = 0;
+        }
+    }
+    else
+    {
+        balance_recover_leg_rise_timer = min(
+            balance_recover_leg_rise_timer + tick, kStandLegRiseMs);
+        const float leg_progress = smoothstep01(
+            (float)balance_recover_leg_rise_timer / (float)kStandLegRiseMs);
+        leg_height_base = balance_recover_start_leg_height +
+            (balance_recover_target_leg_height - balance_recover_start_leg_height) * leg_progress;
+    }
+    leg_loop();
+
+    const float displacement =
+        lqi_param.state.avg_linear_pos - balance_recover_origin_position;
+    balance_recover_displacement = displacement;
+    const float abs_displacement = fabsf(displacement);
+    if(abs_displacement > balance_recover_max_displacement)
+    {
+        balance_recover_max_displacement = abs_displacement;
+        balance_recover_peak_time = balance_recover_timer;
+    }
+    if(displacement < balance_recover_min_signed_displacement)
+    {
+        balance_recover_min_signed_displacement = displacement;
+    }
+    if(displacement > balance_recover_max_signed_displacement)
+    {
+        balance_recover_max_signed_displacement = displacement;
+    }
+
+    balance_recover_position_correction = 0.0f;
+
+    const float yaw_error = shortest_angle_error(
+        balance_recover_origin_yaw, lqi_param.state.yaw_angle);
+    balance_recover_yaw_correction = constrain(
+        yaw_error * kStandYawKp,
+        -kStandYawRateLimit,
+        kStandYawRateLimit
+    );
+
+    const bool posture_ready =
+        fabsf(pitch_error) < pitch_ready &&
+        fabsf(mpu6050_dev.gyro[1]) < pitch_rate_ready;
+    if(posture_ready)
     {
         balance_recover_ready_timer += tick;
     }
@@ -81,10 +218,18 @@ bool controller::balance_recover_loop(uint32_t tick)
         balance_recover_ready_timer = 0;
     }
 
-    if((balance_recover_timer >= min_recover_ms && balance_recover_ready_timer >= ready_hold_ms) ||
-       balance_recover_timer >= max_recover_ms)
+    const bool timed_out = balance_recover_timer >= kStandMaximumRecoverMs;
+    const bool min_elapsed = balance_recover_timer >= kStandMinimumRecoverMs;
+    const bool can_finish =
+        (min_elapsed && balance_recover_ready_timer >= kStandReadyHoldMs) ||
+        (timed_out && posture_ready);
+    if(can_finish)
     {
+        leg_height_base = balance_recover_target_leg_height;
         balance_recover_active = 0;
+        balance_recover_position_correction = 0.0f;
+        balance_recover_yaw_correction = 0.0f;
+        balance_recover_last_elapsed = balance_recover_timer;
         balance_recover_timer = 0;
         balance_recover_ready_timer = 0;
         base_components.reset_motion_reference();
@@ -117,8 +262,80 @@ void controller::lqi_loop(uint32_t tick)
 
     float target_linear_vel = linear_axis * lqi_param.limit.max_linear_vel;
     if(linear_axis < 0.0f){target_linear_vel *= 0.8f;}
+    float target_steering_vel = steer_axis * lqi_param.limit.max_steer_vel;
+    if(balance_recover_active)
+    {
+        balance_idle_hold_active = 0;
+        target_linear_vel = balance_recover_position_correction;
+        target_steering_vel = balance_recover_yaw_correction;
+        lqi_param.integral.linear_vel_error = 0.0f;
+        lqi_param.integral.yaw_rate_error = 0.0f;
+    }
+    else
+    {
+        const bool idle_input = kIdleHoldEnabled &&
+            !jump_active && fabsf(linear_axis) < 0.001f &&
+            fabsf(steer_axis) < 0.001f;
+        if(idle_input && enable_balance)
+        {
+            if(fabsf(lqi_param.state.avg_linear_vel) < kIdleHoldSettleVelocityMps)
+            {
+                balance_idle_hold_settle_timer += tick;
+            }
+            else
+            {
+                balance_idle_hold_settle_timer = 0;
+                balance_idle_hold_active = 0;
+            }
+
+            if(!balance_idle_hold_active &&
+               balance_idle_hold_settle_timer >= kIdleHoldSettleMs)
+            {
+                balance_idle_hold_active = 1;
+                balance_idle_hold_position = lqi_param.state.avg_linear_pos;
+                balance_idle_hold_yaw = lqi_param.state.yaw_angle;
+            }
+
+            if(balance_idle_hold_active)
+            {
+                const float displacement =
+                    lqi_param.state.avg_linear_pos - balance_idle_hold_position;
+                if(fabsf(displacement) > kIdleRelocationThresholdM)
+                {
+                    balance_idle_hold_position = lqi_param.state.avg_linear_pos;
+                    balance_idle_hold_yaw = lqi_param.state.yaw_angle;
+                }
+                else
+                {
+                    float hold_linear_vel = constrain(
+                        -displacement * kIdlePositionKp -
+                            lqi_param.state.avg_linear_vel * kIdleVelocityDamping,
+                        -kIdlePositionMaxSpeedMps, kIdlePositionMaxSpeedMps);
+                    if(fabsf(displacement) <= kIdlePositionDeadbandM)
+                    {
+                        hold_linear_vel = constrain(
+                            -lqi_param.state.avg_linear_vel * kIdleVelocityDamping,
+                            -kIdleVelocityDampingMaxMps,
+                            kIdleVelocityDampingMaxMps);
+                    }
+                    target_linear_vel += hold_linear_vel;
+
+                    const float yaw_error = shortest_angle_error(
+                        balance_idle_hold_yaw, lqi_param.state.yaw_angle);
+                    target_steering_vel += constrain(
+                        -yaw_error * kIdleYawKp,
+                        -kIdleYawMaxRate, kIdleYawMaxRate);
+                }
+            }
+        }
+        else
+        {
+            balance_idle_hold_active = 0;
+            balance_idle_hold_settle_timer = 0;
+        }
+    }
     input[0] += target_linear_vel;
-    input[1] += steer_axis * lqi_param.limit.max_steer_vel;
+    input[1] += target_steering_vel;
 
     if(enable_balance)
     {
@@ -152,11 +369,16 @@ void controller::lqi_loop(uint32_t tick)
 
     if(balance_recover_active)
     {
+        x[0] -= kStandPitchBiasRad;
         x[2] = 0.0f;
         x[3] = 0.0f;
         x[4] = 0.0f;
         x[5] = 0.0f;
-        output_blend = constrain((float)balance_recover_timer * 1.0e-3f / 0.22f, 0.0f, 1.0f);
+        output_blend = constrain(
+            (float)balance_recover_timer * 1.0e-3f / kStandOutputBlendSeconds,
+            0.0f,
+            1.0f
+        );
     }
     else if(jump_active)
     {
@@ -388,9 +610,18 @@ void controller::leg_loop()
     if((buttons & BTN_LEFT) && !(buttons & ~BTN_LEFT)){roll_adjust -= 0.025f;}
     if((buttons & BTN_UP) && !(buttons & ~BTN_UP)){leg_height_base -= 0.025f;}
     if((buttons & BTN_DOWN) && !(buttons & ~BTN_DOWN)){leg_height_base += 0.025f;}
+    leg_height_base = constrain(leg_height_base, kLegHeightBalanceMin, kLegHeightBalanceMax);
 
     float roll_angle = lpf_roll(mpu6050_dev.angle[0] / (float)PI * 180.0f);
     float leg_position_add = pid_roll_angle(roll_angle - roll_adjust);
+    if(balance_recover_active)
+    {
+        leg_position_add = 0.0f;
+    }
+    else if(symmetric_leg_motion || (buttons & (BTN_UP | BTN_DOWN)))
+    {
+        leg_position_add = constrain(leg_position_add, -70.0f, 70.0f);
+    }
 
     int16_t left_position = (int16_t)(2048.0f + 8.4f * (30.0f - leg_height_base) - leg_position_add);
     int16_t right_position = (int16_t)(2048.0f - 8.4f * (30.0f - leg_height_base) - leg_position_add);
