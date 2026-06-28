@@ -556,6 +556,34 @@ def _scan_label(candidates):
     return "TARGET_VISIBLE", len(candidates)
 
 
+def _candidate_from_scan(candidates, roi, requested_family=""):
+    if not candidates:
+        return None
+    roi_center = _center(roi)
+    roi_diagonal = max(1.0, (roi[2] * roi[2] + roi[3] * roi[3]) ** 0.5)
+    filtered = [
+        item for item in candidates
+        if not requested_family or item.family == requested_family
+    ]
+    if not filtered:
+        return None
+
+    def score(item):
+        item_center = _center(item.box)
+        distance = (
+            (item_center[0] - roi_center[0]) ** 2 +
+            (item_center[1] - roi_center[1]) ** 2
+        ) ** 0.5
+        proximity = max(0.0, 1.0 - distance / roi_diagonal)
+        center_match = 1.0 if (
+            _center_inside(item.box, roi) or _center_inside(roi, item.box)
+        ) else 0.0
+        return _iou(item.box, roi) * 0.45 + center_match * 0.30 + proximity * 0.20 + item.score * 0.05
+
+    best = max(filtered, key=score)
+    return best if score(best) > 0.08 else None
+
+
 def _tracking_profile(family):
     if family == "ball":
         return 3
@@ -771,21 +799,24 @@ def run_object_tracking(resources):
             elif command.startswith("TRACKROI:"):
                 try:
                     scan_mode = False
-                    scan_candidates = []
                     requested_profile = max(
                         0, min(3, int(_parse_values(command).get("p", "0")))
                     )
                     x, y, w, h = _roi_to_pixels(command, image_width, image_height)
                     roi = [float(x), float(y), float(w), float(h)]
                     requested_family = "face" if requested_profile == 1 else ("animal" if requested_profile == 2 else ("ball" if requested_profile == 3 else ""))
-                    semantic = (
-                        hybrid_detector.detect(
-                            img, roi, requested_family,
-                            preserve_roi_scale=False,
-                            loose_roi=True,
+                    semantic = _candidate_from_scan(scan_candidates, roi, requested_family)
+                    if semantic is not None:
+                        print(f"[WROBOT] selected scan target: {semantic.family}/{semantic.label} score={semantic.score:.2f}")
+                    if semantic is None:
+                        semantic = (
+                            hybrid_detector.detect(
+                                img, roi, requested_family,
+                                preserve_roi_scale=False,
+                                loose_roi=True,
+                            )
+                            if hybrid_detector and hybrid_detector.ready() else None
                         )
-                        if hybrid_detector and hybrid_detector.ready() else None
-                    )
                     if semantic is not None:
                         target_family, target_label = semantic.family, semantic.label
                         requested_profile = _tracking_profile(target_family)
@@ -809,6 +840,7 @@ def run_object_tracking(resources):
                     velocity_x, velocity_y = 0.0, 0.0
                     report_camera_detection(serial_dev, _semantic_label(target_family, target_label, LOCKED), 1)
                     print(f"[WROBOT] target locked from selection: x={x}, y={y}, w={w}, h={h}, target_h={target_height}, family={target_family}")
+                    scan_candidates = []
                 except Exception as exc:
                     scan_mode = True
                     scan_candidates = []
