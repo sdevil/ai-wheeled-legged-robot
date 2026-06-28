@@ -9,8 +9,6 @@
 #include "devices/ptk7350.h"
 #include "system/task.h"
 
-extern void sendCameraTrackScan();
-
 namespace {
 constexpr float kTrackYawEngageError = 80.0f;
 constexpr float kTrackYawReleaseError = 38.0f;
@@ -167,7 +165,6 @@ void MotionCoreAdapter::update() {
   if (pulseButtons_ && deadlineReached(now, pulseUntilMs_)) pulseButtons_ = 0;
   updateLegHeightTarget(now);
   updateCameraCalibration(now);
-  if (tracking_ && !cameraCalibrationActive_) updateTrackingMotion(now);
   updateStandNudge(now);
   updateCameraGimbal(now);
 
@@ -206,7 +203,7 @@ void MotionCoreAdapter::command(const MotionCommand& command) {
       frontier_servo.set_angle(0);
       break;
     case MotionCommandType::Move:
-      if (!maintenance_ && (!tracking_ || !trackHasLockedTarget_)) {
+      if (!maintenance_) {
         standNudgePending_ = false;
         standNudgeBalanceSinceMs_ = 0;
         standNudgeUntilMs_ = 0;
@@ -259,7 +256,7 @@ void MotionCoreAdapter::command(const MotionCommand& command) {
       trackDistanceCandidateDirection_ = 0;
       trackDistanceCandidateFrames_ = 0;
       trackProfile_ = 0;
-      holdTrackingChassis(true);
+      trackDecision_ = "camera_motion_disabled";
       enterTrackingState(TrackObservationState::Acquiring);
       break;
     case MotionCommandType::TrackStop:
@@ -272,9 +269,7 @@ void MotionCoreAdapter::command(const MotionCommand& command) {
       lastTrackControlUpdateMs_ = 0;
       trackProfile_ = 0;
       enterTrackingState(TrackObservationState::Idle);
-      stopMove();
-      cameraAngle_ = kCameraStandbyDeg;
-      cameraTargetAngle_ = kCameraStandbyDeg;
+      trackDecision_ = "idle";
       break;
     case MotionCommandType::TrackTarget:
       if (tracking_ && !maintenance_) {
@@ -282,9 +277,17 @@ void MotionCoreAdapter::command(const MotionCommand& command) {
         trackReturnScanSent_ = false;
         enterTrackingState(TrackObservationState::Locked);
         lastTrackObservationMs_ = millis();
-        applyTrackTarget(constrain(command.x * 1000 / 320, -1000, 1000),
-                         constrain(command.y * 1000 / 240, -1000, 1000),
-                         command.z == 9999 ? 9999 : constrain(command.z * 6, -1000, 1000));
+        rawTrackDx_ = constrain(command.x * 1000 / 320, -1000, 1000);
+        rawTrackDy_ = constrain(command.y * 1000 / 240, -1000, 1000);
+        rawTrackDz_ = command.z == 9999 ? 9999 : constrain(command.z * 6, -1000, 1000);
+        filteredTrackDx_ = rawTrackDx_;
+        filteredTrackDy_ = rawTrackDy_;
+        filteredTrackDz_ = rawTrackDz_;
+        trackYawTarget_ = 0.0f;
+        trackDriveTarget_ = 0.0f;
+        trackYawEngaged_ = false;
+        trackDistanceEngaged_ = false;
+        trackDecision_ = "camera_motion_disabled";
       }
       break;
     case MotionCommandType::TrackObservation:
@@ -298,7 +301,7 @@ void MotionCoreAdapter::command(const MotionCommand& command) {
       }
       break;
     case MotionCommandType::LegLean:
-      if (!maintenance_ && !tracking_) {
+      if (!maintenance_) {
         ctrl.roll_adjust_target =
             constrain((float)command.x * (kLegLeanMaxDeg / 100.0f),
                       -kLegLeanMaxDeg, kLegLeanMaxDeg);
@@ -308,14 +311,14 @@ void MotionCoreAdapter::command(const MotionCommand& command) {
       if (command.y == 0) {
         heldPostureButtons_ = 0;
         ctrl.symmetric_leg_motion = 0;
-      } else if (!maintenance_ && !tracking_) {
+      } else if (!maintenance_) {
         legHeightTargetActive_ = false;
         ctrl.symmetric_leg_motion = 1;
         heldPostureButtons_ = command.y > 0 ? BTN_UP : BTN_DOWN;
       }
       break;
     case MotionCommandType::LegHeightPercent:
-      if (!maintenance_ && !tracking_) {
+      if (!maintenance_) {
         heldPostureButtons_ = 0;
         legHeightBaseTarget_ = legHeightBaseFromPercent(command.y);
         legHeightTargetActive_ = true;
@@ -485,7 +488,7 @@ int MotionCoreAdapter::legLeanPercent() const {
 }
 
 void MotionCoreAdapter::updateLegHeightTarget(uint32_t now) {
-  if (!legHeightTargetActive_ || maintenance_ || tracking_) return;
+  if (!legHeightTargetActive_ || maintenance_) return;
   if (ctrl.fsm_state_machine.mode != fsm::mode_state::BALANCE) {
     legHeightTargetActive_ = false;
     ctrl.symmetric_leg_motion = 0;
@@ -536,7 +539,9 @@ void MotionCoreAdapter::stopMove() {
 }
 
 void MotionCoreAdapter::holdTrackingChassis(bool resetReference) {
-  stopMove();
+  (void)resetReference;
+  trackYawTarget_ = 0.0f;
+  trackDriveTarget_ = 0.0f;
   trackYawEngaged_ = false;
   trackYawReversePending_ = false;
   trackDistanceEngaged_ = false;
@@ -544,23 +549,12 @@ void MotionCoreAdapter::holdTrackingChassis(bool resetReference) {
   trackYawCandidateFrames_ = 0;
   trackDistanceCandidateDirection_ = 0;
   trackDistanceCandidateFrames_ = 0;
-  ctrl.jump_turn_yaw_rate_cmd = 0.0f;
-  ctrl.jump_linear_vel_cmd = 0.0f;
-  ctrl.jump_linear_direction = 0;
-  ctrl.jump_turn_direction = 0;
-  ctrl.lqi_param.ref.yaw_rate = 0.0f;
-  ctrl.lqi_param.ref.linear_vel = 0.0f;
-  ctrl.lqi_param.integral.yaw_rate_error = 0.0f;
-  ctrl.lqi_param.integral.linear_vel_error = 0.0f;
-  ctrl.balance_idle_hold_active = 0;
-  ctrl.balance_idle_hold_settle_timer = 0;
-  if (resetReference) ctrl.base_components.reset_motion_reference();
 }
 
 void MotionCoreAdapter::updateStandNudge(uint32_t now) {
   if (!standNudgePending_ && standNudgeUntilMs_ == 0) return;
 
-  if (maintenance_ || tracking_ || cameraCalibrationActive_) {
+  if (maintenance_ || cameraCalibrationActive_) {
     standNudgePending_ = false;
     standNudgeBalanceSinceMs_ = 0;
     standNudgeUntilMs_ = 0;
@@ -595,19 +589,14 @@ void MotionCoreAdapter::enterTrackingState(TrackObservationState state) {
   trackState_ = state;
   trackStateSinceMs_ = millis();
   recordDiagnosticEvent("tracking", String("state=") + trackingStateName());
-  if (state == TrackObservationState::Reacquiring) {
-    holdTrackingChassis(true);
-    searchCameraCenterAngle_ = cameraTargetAngle_;
-  } else if (state == TrackObservationState::Acquiring ||
-             state == TrackObservationState::Coasting ||
-             state == TrackObservationState::Lost ||
-             state == TrackObservationState::Idle) {
-    holdTrackingChassis(state != TrackObservationState::Idle);
-  }
-  if ((state == TrackObservationState::Lost ||
-       state == TrackObservationState::Idle) && trackHasLockedTarget_) {
-    cameraTargetAngle_ = kCameraStandbyDeg;
-  }
+  trackYawTarget_ = 0.0f;
+  trackDriveTarget_ = 0.0f;
+  trackYawEngaged_ = false;
+  trackDistanceEngaged_ = false;
+  trackYawCandidateDirection_ = 0;
+  trackYawCandidateFrames_ = 0;
+  trackDistanceCandidateDirection_ = 0;
+  trackDistanceCandidateFrames_ = 0;
 }
 
 void MotionCoreAdapter::applyTrackObservation(const MotionCommand& command) {
@@ -627,7 +616,6 @@ void MotionCoreAdapter::applyTrackObservation(const MotionCommand& command) {
   trackVelocityX_ = command.velocityX;
   trackVelocityY_ = command.velocityY;
   TrackObservationState nextState = command.trackState;
-  const bool hadLockedTarget = trackHasLockedTarget_;
   if (!trackHasLockedTarget_ &&
       (nextState == TrackObservationState::Coasting ||
        nextState == TrackObservationState::Reacquiring)) {
@@ -639,315 +627,46 @@ void MotionCoreAdapter::applyTrackObservation(const MotionCommand& command) {
   }
   else {
     trackHasLockedTarget_ = false;
-    if (hadLockedTarget && nextState != TrackObservationState::Idle) {
-      trackChassisHoldUntilMs_ = millis() + 1200U;
-    }
+    trackChassisHoldUntilMs_ = 0;
   }
   enterTrackingState(nextState);
-
-  if (nextState == TrackObservationState::Locked) {
-    applyTrackTarget(command.x, command.y, command.z);
-  } else if (nextState == TrackObservationState::Coasting ||
-             nextState == TrackObservationState::Reacquiring) {
-    // Visual gaps are not reliable target observations. Stop the chassis and
-    // hold the gimbal. Brief detector misses are common; snapping the camera
-    // back to standby creates a vision-balance feedback loop.
-    holdTrackingChassis(true);
-  } else if (nextState == TrackObservationState::Acquiring ||
-             nextState == TrackObservationState::Lost ||
-             nextState == TrackObservationState::Idle) {
-    holdTrackingChassis(nextState != TrackObservationState::Idle);
-  }
+  rawTrackDx_ = command.x;
+  rawTrackDy_ = command.y;
+  rawTrackDz_ = command.z;
+  filteredTrackDx_ = rawTrackDx_;
+  filteredTrackDy_ = rawTrackDy_;
+  filteredTrackDz_ = rawTrackDz_;
+  trackYawTarget_ = 0.0f;
+  trackDriveTarget_ = 0.0f;
+  trackYawEngaged_ = false;
+  trackDistanceEngaged_ = false;
+  trackDecision_ = tracking_ ? "camera_motion_disabled" : "idle";
 }
 
 void MotionCoreAdapter::applyTrackTarget(int dx, int dy, int dz) {
   rawTrackDx_ = dx;
   rawTrackDy_ = dy;
   rawTrackDz_ = dz;
-  trackDecision_ = "input_received";
-  if (dx == 9999 || dy == 9999 ||
-      !deadlineReached(millis(), trackSettleUntilMs_)) {
-    trackYawTarget_ = 0.0f;
-    trackDriveTarget_ = 0.0f;
-    trackDistanceEngaged_ = false;
-    trackDecision_ = dx == 9999 || dy == 9999 ? "invalid_error" : "settling";
-    return;
-  }
-
-  holdTrackingChassis(true);
-  const TrackingTuning tuning = trackingTuning(trackProfile_);
+  filteredTrackDx_ = rawTrackDx_;
+  filteredTrackDy_ = rawTrackDy_;
+  filteredTrackDz_ = rawTrackDz_;
   trackYawTarget_ = 0.0f;
-  trackYawEngaged_ = false;
   trackDriveTarget_ = 0.0f;
-  trackDistanceEngaged_ = false;
-  trackDecision_ = "vision_lock_only";
-  if (trackProfile_ == 1 && trackStableFrames_ < 6) {
-    trackDecision_ = "waiting_stable_face";
-    return;
-  }
-  if (trackConfidence_ > 0 && trackConfidence_ < tuning.minimumConfidence) {
-    trackYawTarget_ = 0.0f;
-    trackYawEngaged_ = false;
-    trackDriveTarget_ = 0.0f;
-    trackDistanceEngaged_ = false;
-    trackDecision_ = "low_confidence";
-    return;
-  }
-
-  int pitchControlDy = dy;
-  if (trackFrameH_ > 0 && trackBoxH_ > 0) {
-    const float targetCenterY = (float)trackBoxY_ + (float)trackBoxH_ * 0.5f;
-    const float safeTop = (float)trackFrameH_ / 3.0f;
-    const float safeBottom = (float)trackFrameH_ * 2.0f / 3.0f;
-    float pitchErrorPx = 0.0f;
-    if (targetCenterY < safeTop) {
-      pitchErrorPx = targetCenterY - safeTop;
-    } else if (targetCenterY > safeBottom) {
-      pitchErrorPx = targetCenterY - safeBottom;
-    }
-    pitchControlDy = constrain((int)roundf(pitchErrorPx * 1000.0f /
-                                           max(1.0f, (float)trackFrameH_ * 0.5f)),
-                               -1000, 1000);
-  }
-
-  if (trackProfile_ == 1) {
-    const bool unreliablePitch = abs(dy) >= 850;
-    const bool unreliableDistance = dz != 9999 && abs(dz) >= 650;
-    dx = constrain(dx, -260, 260);
-    pitchControlDy = unreliablePitch ? 0 : constrain(pitchControlDy, -260, 260);
-    if (unreliableDistance) dz = 9999;
-    else if (dz != 9999) dz = constrain(dz, -300, 300);
-  }
-
-  filteredTrackDx_ += ((float)dx - filteredTrackDx_) * tuning.filterAlpha;
-  if (pitchControlDy == 0) {
-    filteredTrackDy_ = 0.0f;
-  } else {
-    filteredTrackDy_ = (float)pitchControlDy;
-  }
-  dz = 9999;
-
-  const float horizontalError = fabsf(filteredTrackDx_);
-  const float pitchAngleDeg = ctrl.lqi_param.state.pitch_angle * 180.0f / PI;
-  const float pitchRateDeg = ctrl.lqi_param.state.pitch_rate * 180.0f / PI;
-  const bool balanceQuiet = trackProfile_ != 1 ||
-      (fabsf(pitchAngleDeg) < 7.5f && fabsf(pitchRateDeg) < 5.0f);
-  if (!balanceQuiet) {
-    trackYawTarget_ = 0.0f;
-    trackYawEngaged_ = false;
-    trackDriveTarget_ = 0.0f;
-    trackDistanceEngaged_ = false;
-    trackDecision_ = "balance_not_quiet";
-    return;
-  }
-
-  const uint32_t now = millis();
-  const float visionOnlyPitchDeadband = trackProfile_ == 3 ? 12.0f : 18.0f;
-  trackYawTarget_ = 0.0f;
   trackYawEngaged_ = false;
-  filteredTrackDx_ = 0.0f;
-  axes_[0] = 0.0f;
-  ctrl.jump_turn_yaw_rate_cmd = 0.0f;
-  ctrl.lqi_param.ref.yaw_rate = 0.0f;
-  ctrl.lqi_param.integral.yaw_rate_error = 0.0f;
-
-  if (fabsf(filteredTrackDy_) > visionOnlyPitchDeadband &&
-      now - lastTrackGimbalUpdateMs_ >= 24U) {
-    const float pitchGain = trackProfile_ == 3 ? 0.018f : 0.008f;
-    const int maxPitchStep = 2;
-    int delta = constrain((int)roundf(-filteredTrackDy_ * pitchGain), -maxPitchStep, maxPitchStep);
-    if (delta == 0) delta = filteredTrackDy_ > 0.0f ? -1 : 1;
-    cameraTargetAngle_ = constrain(cameraTargetAngle_ + delta,
-                                   (float)kTrackCameraMinDeg,
-                                   (float)kTrackCameraMaxDeg);
-    lastTrackGimbalUpdateMs_ = now;
-  }
-  if (fabsf(filteredTrackDy_) <= visionOnlyPitchDeadband) {
-    trackDecision_ = "inside_pitch_safe_zone";
-    return;
-  }
-  trackDecision_ = "vision_lock_only";
-  return;
-
-  const uint32_t controlIntervalMs =
-      trackProfile_ == 3 ? 60U : (trackProfile_ == 1 ? 45U : kTrackControlIntervalMs);
-  if (lastTrackControlUpdateMs_ != 0 &&
-      now - lastTrackControlUpdateMs_ < controlIntervalMs) {
-    trackDecision_ = "rate_limited";
-    return;
-  }
-  lastTrackControlUpdateMs_ = now;
-
-  const float yawEngageError = trackProfile_ == 3 ? 70.0f : (trackProfile_ == 1 ? 120.0f : kTrackYawEngageError);
-  const float yawReleaseError = trackProfile_ == 3 ? 35.0f : (trackProfile_ == 1 ? 28.0f : kTrackYawReleaseError);
-  const float yawEngageThreshold = trackProfile_ == 1 ? 58.0f : yawEngageError;
-  const int requestedDirection = filteredTrackDx_ > 0.0f ? 1 : -1;
-  if (!trackYawEngaged_) {
-    if (horizontalError >= yawEngageThreshold) {
-      if (trackYawCandidateDirection_ == requestedDirection) {
-        trackYawCandidateFrames_++;
-      } else {
-        trackYawCandidateDirection_ = requestedDirection;
-        trackYawCandidateFrames_ = 1;
-      }
-      const uint8_t requiredFrames = trackProfile_ == 1
-                                         ? 1
-                                         : (trackYawReversePending_
-                                                ? kTrackYawReverseFrames
-                                                : kTrackYawEngageFrames);
-      if (trackYawCandidateFrames_ >= requiredFrames) {
-        trackYawEngaged_ = true;
-        trackYawReversePending_ = false;
-        lastTargetDirection_ = requestedDirection;
-      }
-    } else {
-      trackYawCandidateDirection_ = 0;
-      trackYawCandidateFrames_ = 0;
-      trackYawReversePending_ = false;
-    }
-  } else if (horizontalError <= yawReleaseError) {
-    trackYawEngaged_ = false;
-    trackYawCandidateDirection_ = 0;
-    trackYawCandidateFrames_ = 0;
-    trackYawReversePending_ = false;
-  } else if (requestedDirection != lastTargetDirection_) {
-    trackYawEngaged_ = false;
-    trackYawReversePending_ = true;
-    trackYawCandidateDirection_ = requestedDirection;
-    trackYawCandidateFrames_ = 1;
-  }
-
-  if (trackYawEngaged_) {
-    trackYawTarget_ = constrain(
-                                kTrackYawPolarity * filteredTrackDx_ / tuning.yawScale,
-                                -tuning.maxYaw, tuning.maxYaw);
-  } else {
-    trackYawTarget_ = 0.0f;
-  }
-
-  const float driveAlignError = trackProfile_ == 1 ? 150.0f : kTrackDriveAlignError;
-  const float distanceEngageError = trackProfile_ == 1 ? 70.0f : kTrackDistanceEngageError;
-  const float distanceReleaseError = trackProfile_ == 1 ? 35.0f : kTrackDistanceReleaseError;
-  const bool horizontallyAligned = horizontalError <= driveAlignError;
-  const float distanceError = fabsf(filteredTrackDz_);
-  const int distanceDirection = filteredTrackDz_ >= 0.0f ? 1 : -1;
-  if (!horizontallyAligned || dz == 9999 ||
-      distanceError <= distanceReleaseError) {
-    trackDistanceEngaged_ = false;
-    trackDistanceCandidateDirection_ = 0;
-    trackDistanceCandidateFrames_ = 0;
-  } else if (!trackDistanceEngaged_ &&
-             distanceError >= distanceEngageError) {
-    if (trackDistanceCandidateDirection_ == distanceDirection) {
-      trackDistanceCandidateFrames_++;
-    } else {
-      trackDistanceCandidateDirection_ = distanceDirection;
-      trackDistanceCandidateFrames_ = 1;
-    }
-    const uint8_t requiredDistanceFrames = trackProfile_ == 1 ? 4 : kTrackDistanceEngageFrames;
-    if (trackDistanceCandidateFrames_ >= requiredDistanceFrames) {
-      trackDistanceEngaged_ = true;
-    }
-  } else if (!trackDistanceEngaged_) {
-    trackDistanceCandidateDirection_ = 0;
-    trackDistanceCandidateFrames_ = 0;
-  } else if (trackDistanceEngaged_ &&
-             distanceDirection != trackDistanceCandidateDirection_) {
-    trackDistanceEngaged_ = false;
-    trackDistanceCandidateDirection_ = distanceDirection;
-    trackDistanceCandidateFrames_ = 1;
-  }
-
-  if (trackDistanceEngaged_ && horizontallyAligned) {
-    // Continue distance correction during a moderate turn, but progressively
-    // reduce it as horizontal error grows so the robot does not drive sideways
-    // out of the target lock.
-    const float minAlignmentScale = trackProfile_ == 1 ? 0.15f : 0.25f;
-    const float alignmentScale = constrain(
-        1.0f - horizontalError / kTrackDriveAlignError, minAlignmentScale, 1.0f);
-    trackDriveTarget_ = constrain(
-                                  kTrackDrivePolarity * filteredTrackDz_ /
-                                      tuning.distanceScale,
-                                  -tuning.maxDrive, tuning.maxDrive) *
-                        alignmentScale;
-  } else {
-    trackDriveTarget_ = 0.0f;
-  }
-
-  trackDecision_ = trackYawEngaged_ || trackDistanceEngaged_ ? "locked_command" : "inside_deadband";
-
-  const float pitchDeadband = trackProfile_ == 3 ? 28.0f : (trackProfile_ == 1 ? 32.0f : kTrackPitchDeadband);
-  if (fabsf(filteredTrackDy_) > pitchDeadband &&
-      now - lastTrackGimbalUpdateMs_ >= 24U) {
-    const float pitchGain = trackProfile_ == 3 ? 0.034f : (trackProfile_ == 1 ? 0.016f : 0.026f);
-    const int maxPitchStep = 2;
-    const int delta = constrain((int)roundf(-filteredTrackDy_ * pitchGain), -maxPitchStep, maxPitchStep);
-    cameraTargetAngle_ = constrain(cameraTargetAngle_ + delta,
-                                   (float)kCameraMinDeg,
-                                   (float)kCameraMaxDeg);
-    lastTrackGimbalUpdateMs_ = now;
-  }
+  trackDistanceEngaged_ = false;
+  trackDecision_ = "camera_motion_disabled";
 }
+
 void MotionCoreAdapter::updateTrackingMotion(uint32_t now) {
-  ctrl.balance_idle_hold_active = 0;
-  ctrl.balance_idle_hold_settle_timer = 0;
-
-  if (!trackHasLockedTarget_) {
-    if (trackChassisHoldUntilMs_ != 0 && !deadlineReached(now, trackChassisHoldUntilMs_)) {
-      holdTrackingChassis(false);
-    } else {
-      if (trackChassisHoldUntilMs_ != 0 && !trackReturnScanSent_) {
-        sendCameraTrackScan();
-        recordDiagnosticEvent("camera", "track_scan_auto");
-        trackReturnScanSent_ = true;
-        enterTrackingState(TrackObservationState::Acquiring);
-      }
-      trackChassisHoldUntilMs_ = 0;
-      trackYawTarget_ = 0.0f;
-      trackYawEngaged_ = false;
-      trackDriveTarget_ = 0.0f;
-      trackDistanceEngaged_ = false;
-    }
-    return;
-  }
-
-  if (ctrl.fsm_state_machine.mode != fsm::mode_state::BALANCE) {
-    trackBalanceReadySinceMs_ = 0;
-    holdTrackingChassis(false);
-    lastTrackMotionUpdateMs_ = now;
-    return;
-  }
-
-  if (trackBalanceReadySinceMs_ == 0) {
-    trackBalanceReadySinceMs_ = now;
-  }
-  if (now - trackBalanceReadySinceMs_ < kTrackBalanceStableMs) {
-    holdTrackingChassis(false);
-    lastTrackMotionUpdateMs_ = now;
-    return;
-  }
-
-  if (lastTrackObservationMs_ != 0 &&
-      now - lastTrackObservationMs_ > kTrackCommandTimeoutMs &&
-      trackHasLockedTarget_ && trackState_ != TrackObservationState::Lost) {
-    // Missing UART traffic is a transport/inference stall, not proof that the
-    // target disappeared. Stop safely and wait for the camera's explicit state.
-    enterTrackingState(TrackObservationState::Coasting);
-  }
-
-  if (trackState_ == TrackObservationState::Reacquiring) {
-    const uint32_t elapsed = now - trackStateSinceMs_;
-    holdTrackingChassis(false);
-    cameraTargetAngle_ = kCameraStandbyDeg;
-    if (elapsed >= kSearchGiveUpMs) {
-      enterTrackingState(TrackObservationState::Lost);
-    }
-  }
-
-  const uint32_t elapsedMs = lastTrackMotionUpdateMs_ == 0 ? 2 : now - lastTrackMotionUpdateMs_;
+  const uint32_t elapsedMs =
+      lastTrackMotionUpdateMs_ == 0 ? 2 : now - lastTrackMotionUpdateMs_;
+  (void)elapsedMs;
   lastTrackMotionUpdateMs_ = now;
-  const float dt = min(elapsedMs, (uint32_t)50) / 1000.0f;
-  holdTrackingChassis(false);
+  trackYawTarget_ = 0.0f;
+  trackDriveTarget_ = 0.0f;
+  trackYawEngaged_ = false;
+  trackDistanceEngaged_ = false;
+  trackDecision_ = "camera_motion_disabled";
 }
 
 const char* MotionCoreAdapter::modeName() const {
