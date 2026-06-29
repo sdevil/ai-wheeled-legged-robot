@@ -23,6 +23,7 @@ class MotionCoreAdapter final : public MotionCore {
   void updateTrackingMotion(uint32_t now);
   void updateStandNudge(uint32_t now);
   void updateLegHeightTarget(uint32_t now);
+  void armDefaultStandPose();
   void setLegHeightTargetPercent(int percent);
   void setGuardServoAngle(int angleDeg);
   int legHeightPercent() const;
@@ -82,6 +83,8 @@ class MotionCoreAdapter final : public MotionCore {
   uint8_t trackDistanceCandidateFrames_ = 0;
   int lastTargetDirection_ = 1;
   bool legHeightTargetActive_ = false;
+  bool legHeightForceSync_ = false;
+  bool defaultStandPosePending_ = false;
   bool standNudgePending_ = false;
   float legHeightBaseTarget_ = 0.0f;
   uint32_t lastLegHeightUpdateMs_ = 0;
