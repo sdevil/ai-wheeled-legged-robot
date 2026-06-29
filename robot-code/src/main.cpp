@@ -193,12 +193,7 @@ void processWebControl() {
   static int lastNonZeroWebJoyY = 0;
   static unsigned long webZeroSinceMs = 0;
   static unsigned long lastTrackScanRetryMs = 0;
-  static bool startupCameraPingSent = false;
   dispatchWebAction(consumeWebRobotAction());
-  if (!startupCameraPingSent && millis() >= 2500) {
-    startupCameraPingSent = true;
-    sendCameraPing();
-  }
   if (trace_mode && isWebCameraScanPending() &&
       millis() - lastTrackScanRetryMs >= 1000) {
     lastTrackScanRetryMs = millis();

@@ -36,6 +36,7 @@ String cameraLastRxSource;
 uint32_t cameraHttpTxCount = 0;
 int cameraLastHttpCode = 0;
 String cameraLastHttpUrl;
+bool startupVersionRequestSent = false;
 
 String trimToken(const char* value) {
   String result = String(value ? value : "");
@@ -43,6 +44,14 @@ String trimToken(const char* value) {
   return result;
 }
 void sendCameraHttpCommand(const String& command, const String& diagnosticName);
+
+void sendCameraUartCommand(const String& command, const String& diagnosticName) {
+  cameraSerial.println(command);
+  Serial.println(command);
+  cameraTxCount++;
+  cameraLastTxMs = millis();
+  cameraLastTxCommand = diagnosticName;
+}
 
 const char* trackingStateText(TrackObservationState state) {
   switch (state) {
@@ -58,11 +67,7 @@ const char* trackingStateText(TrackObservationState state) {
 }
 
 void sendCameraCommand(const String& command, const String& diagnosticName) {
-  cameraSerial.println(command);
-  Serial.println(command);
-  cameraTxCount++;
-  cameraLastTxMs = millis();
-  cameraLastTxCommand = diagnosticName;
+  sendCameraUartCommand(command, diagnosticName);
   sendCameraHttpCommand(command, diagnosticName);
 }
 
@@ -149,6 +154,10 @@ void initCameraSerial() {
 }
 
 void serialReceiveProcess() {
+  if (!startupVersionRequestSent && millis() >= 2500) {
+    startupVersionRequestSent = true;
+    sendCameraUartCommand("CAMPING;", "CAMPING_BOOT");
+  }
   pollSerialStream(cameraSerial, cameraFrame, "uart1", 160);
   pollSerialStream(Serial, usbFrame, "uart0", 64);
 }
