@@ -37,6 +37,7 @@ constexpr float kLegHeightBaseMax = 52.0f;
 constexpr float kLegHeightControlMin = -1.0f;
 constexpr float kLegHeightControlMax = 49.0f;
 constexpr float kLegHeightSlewPerSecond = 42.0f;
+constexpr uint32_t kLegHeightForceSyncHoldMs = 220;
 constexpr int kDefaultLegHeightPercent = 55;
 constexpr int kDefaultGuardAngleDeg = 0;
 constexpr uint32_t kTrackSettleMs = 300;
@@ -170,6 +171,7 @@ void MotionCoreAdapter::command(const MotionCommand& command) {
       legHeightTargetPercent_ = -1;
       legHeightTargetActive_ = false;
       legHeightForceSync_ = false;
+      legHeightForceSyncHoldUntilMs_ = 0;
       ctrl.force_sync_leg_motion = 0;
       ctrl.symmetric_leg_motion = 0;
       heldPostureButtons_ = 0;
@@ -188,6 +190,7 @@ void MotionCoreAdapter::command(const MotionCommand& command) {
       legHeightTargetPercent_ = -1;
       legHeightTargetActive_ = false;
       legHeightForceSync_ = false;
+      legHeightForceSyncHoldUntilMs_ = 0;
       ctrl.force_sync_leg_motion = 0;
       ctrl.symmetric_leg_motion = 0;
       standNudgePending_ = false;
@@ -209,6 +212,7 @@ void MotionCoreAdapter::command(const MotionCommand& command) {
       ctrl.leg_lean_target = 0.0f;
       heldPostureButtons_ = 0;
       legHeightForceSync_ = false;
+      legHeightForceSyncHoldUntilMs_ = 0;
       ctrl.force_sync_leg_motion = 0;
       ctrl.symmetric_leg_motion = 0;
       setLegHeightTargetPercent(kDefaultLegHeightPercent);
@@ -249,6 +253,7 @@ void MotionCoreAdapter::command(const MotionCommand& command) {
       legHeightTargetPercent_ = -1;
       legHeightTargetActive_ = false;
       legHeightForceSync_ = false;
+      legHeightForceSyncHoldUntilMs_ = 0;
       ctrl.force_sync_leg_motion = 0;
       ctrl.symmetric_leg_motion = 0;
       standNudgePending_ = false;
@@ -281,6 +286,7 @@ void MotionCoreAdapter::command(const MotionCommand& command) {
       legHeightTargetPercent_ = -1;
       legHeightTargetActive_ = false;
       legHeightForceSync_ = false;
+      legHeightForceSyncHoldUntilMs_ = 0;
       ctrl.force_sync_leg_motion = 0;
       ctrl.symmetric_leg_motion = 0;
       trackHasLockedTarget_ = false;
@@ -325,6 +331,7 @@ void MotionCoreAdapter::command(const MotionCommand& command) {
         legHeightTargetPercent_ = -1;
         heldPostureButtons_ = 0;
         legHeightForceSync_ = false;
+        legHeightForceSyncHoldUntilMs_ = 0;
         ctrl.force_sync_leg_motion = 0;
         ctrl.symmetric_leg_motion = 0;
       } else if (!maintenance_) {
@@ -332,6 +339,7 @@ void MotionCoreAdapter::command(const MotionCommand& command) {
         legHeightTargetPercent_ = -1;
         legHeightTargetActive_ = false;
         legHeightForceSync_ = false;
+        legHeightForceSyncHoldUntilMs_ = 0;
         ctrl.force_sync_leg_motion = 0;
         ctrl.symmetric_leg_motion = 1;
         heldPostureButtons_ = command.y > 0 ? BTN_UP : BTN_DOWN;
@@ -353,6 +361,7 @@ void MotionCoreAdapter::command(const MotionCommand& command) {
       legHeightTargetPercent_ = -1;
       legHeightTargetActive_ = false;
       legHeightForceSync_ = false;
+      legHeightForceSyncHoldUntilMs_ = 0;
       ctrl.force_sync_leg_motion = 0;
       ctrl.symmetric_leg_motion = 0;
       standNudgePending_ = false;
@@ -499,6 +508,7 @@ void MotionCoreAdapter::updateLegHeightTarget(uint32_t now) {
   if (ctrl.fsm_state_machine.mode != fsm::mode_state::BALANCE) {
     legHeightTargetActive_ = false;
     legHeightForceSync_ = false;
+    legHeightForceSyncHoldUntilMs_ = 0;
     ctrl.force_sync_leg_motion = 0;
     ctrl.symmetric_leg_motion = 0;
     return;
@@ -507,7 +517,9 @@ void MotionCoreAdapter::updateLegHeightTarget(uint32_t now) {
   const uint32_t elapsedMs =
       lastLegHeightUpdateMs_ == 0 ? 2 : now - lastLegHeightUpdateMs_;
   lastLegHeightUpdateMs_ = now;
-  ctrl.force_sync_leg_motion = legHeightForceSync_ ? 1 : 0;
+  const bool keepSync =
+      legHeightForceSync_ || static_cast<int32_t>(now - legHeightForceSyncHoldUntilMs_) < 0;
+  ctrl.force_sync_leg_motion = keepSync ? 1 : 0;
   const float dt = min(elapsedMs, (uint32_t)50) / 1000.0f;
   ctrl.leg_height_base = approach(ctrl.leg_height_base, legHeightBaseTarget_,
                                   kLegHeightSlewPerSecond * dt);
@@ -515,7 +527,6 @@ void MotionCoreAdapter::updateLegHeightTarget(uint32_t now) {
     ctrl.leg_height_base = legHeightBaseTarget_;
     legHeightTargetActive_ = false;
     legHeightForceSync_ = false;
-    ctrl.force_sync_leg_motion = 0;
     ctrl.symmetric_leg_motion = 0;
   }
 }
@@ -535,9 +546,11 @@ void MotionCoreAdapter::setLegHeightTargetPercent(int percent) {
   legHeightBaseTarget_ = requestedTarget;
   legHeightForceSync_ =
       requestedTarget < ctrl.leg_height_base || percent >= 95;
+  legHeightForceSyncHoldUntilMs_ = millis() + kLegHeightForceSyncHoldMs;
   legHeightTargetActive_ = !alreadyAtTarget;
   ctrl.symmetric_leg_motion = 1;
-  ctrl.force_sync_leg_motion = legHeightForceSync_ ? 1 : 0;
+  ctrl.force_sync_leg_motion =
+      (legHeightForceSync_ || !alreadyAtTarget) ? 1 : 0;
   if (!samePercent || !alreadyAtTarget) {
     lastLegHeightUpdateMs_ = millis();
   }

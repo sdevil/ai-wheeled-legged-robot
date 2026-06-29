@@ -89,6 +89,7 @@ class MotionCoreAdapter final : public MotionCore {
   bool standNudgePending_ = false;
   float legHeightBaseTarget_ = 0.0f;
   uint32_t lastLegHeightUpdateMs_ = 0;
+  uint32_t legHeightForceSyncHoldUntilMs_ = 0;
   int guardServoAngleDeg_ = 0;
 };
 
