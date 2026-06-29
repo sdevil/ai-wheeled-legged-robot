@@ -2036,9 +2036,6 @@ function LeanSlider({
     activeRef.current = false;
     activePointerIdRef.current = null;
     stopHeartbeat();
-    valueRef.current = 0;
-    setDisplayValue(0);
-    onChangeRef.current(0);
   }, []);
 
   useEffect(() => {
@@ -2110,7 +2107,7 @@ function LeanSlider({
           {label}
         </Typography>
         <Typography sx={{ color: '#80aaff', fontSize: 10, fontWeight: 700 }}>
-          {displayValue > 0 ? `R ${displayValue}%` : displayValue < 0 ? `L ${Math.abs(displayValue)}%` : '0%'}
+          {displayValue > 0 ? `R +${displayValue}%` : displayValue < 0 ? `L ${displayValue}%` : '0%'}
         </Typography>
       </Stack>
       <Stack direction="row" spacing={0.6} sx={{ alignItems: 'center' }}>
