@@ -619,7 +619,7 @@ void controller::leg_loop()
 
     float roll_angle = lpf_roll(mpu6050_dev.angle[0] / (float)PI * 180.0f);
     float leg_position_add = pid_roll_angle(roll_angle - roll_adjust);
-    if(balance_recover_active || force_sync_leg_motion)
+    if(balance_recover_active)
     {
         leg_position_add = 0.0f;
     }

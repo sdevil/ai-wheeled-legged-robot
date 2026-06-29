@@ -22,10 +22,8 @@ class MotionCoreAdapter final : public MotionCore {
   void enterTrackingState(TrackObservationState state);
   void updateTrackingMotion(uint32_t now);
   void updateStandNudge(uint32_t now);
-  void updateGuardClearance(uint32_t now);
   void updateLegHeightTarget(uint32_t now);
   void setLegHeightTargetPercent(int percent);
-  bool approachGuardClearanceLegHeight(int percent, uint32_t now);
   void setGuardServoAngle(int angleDeg);
   int legHeightPercent() const;
   int legLeanPercent() const;
@@ -84,16 +82,10 @@ class MotionCoreAdapter final : public MotionCore {
   uint8_t trackDistanceCandidateFrames_ = 0;
   int lastTargetDirection_ = 1;
   bool legHeightTargetActive_ = false;
-  bool guardClearanceActive_ = false;
   bool standNudgePending_ = false;
   float legHeightBaseTarget_ = 0.0f;
   uint32_t lastLegHeightUpdateMs_ = 0;
   int guardServoAngleDeg_ = 0;
-  int guardClearancePhase_ = 0;
-  int guardClearanceSavedLegHeightPercent_ = 50;
-  int guardClearancePendingAngleDeg_ = 0;
-  uint32_t guardClearancePhaseStartedMs_ = 0;
-  uint32_t lastGuardClearanceUpdateMs_ = 0;
 };
 
 MotionCoreAdapter& motionCore();

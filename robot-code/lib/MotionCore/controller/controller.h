@@ -78,8 +78,6 @@ class controller {
         float balance_idle_hold_position = 0.0f;
         float balance_idle_hold_yaw = 0.0f;
         uint8_t symmetric_leg_motion = 0;
-        uint8_t force_sync_leg_motion = 0;
-
         float roll_adjust = 0.0f;
         float roll_adjust_target = 0.0f;
         float leg_lean = 0.0f;
