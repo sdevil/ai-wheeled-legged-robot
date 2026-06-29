@@ -628,27 +628,21 @@ void controller::leg_loop()
         leg_position_add = constrain(leg_position_add, -70.0f, 70.0f);
     }
 
+    int16_t left_position = (int16_t)(2048.0f + 8.4f * (30.0f - leg_height_base) - leg_position_add);
+    int16_t right_position = (int16_t)(2048.0f - 8.4f * (30.0f - leg_height_base) - leg_position_add);
+
     const float lean_amount = constrain(leg_lean, -1.0f, 1.0f);
-    const float lean_left_span = leg_height_base - kLegHeightBaseMin;
-    const float lean_right_span = kLegHeightBaseMax - leg_height_base;
-    float left_leg_height_base = leg_height_base;
-    float right_leg_height_base = leg_height_base;
     if(lean_amount > 0.0f)
     {
-        left_leg_height_base -= lean_amount * lean_left_span;
-        right_leg_height_base += lean_amount * lean_right_span;
+        left_position = (int16_t)(left_position + lean_amount * ((float)SERVO_LEFT_MAX - left_position));
+        right_position = (int16_t)(right_position + lean_amount * ((float)SERVO_RIGHT_MIN - right_position));
     }
     else if(lean_amount < 0.0f)
     {
         const float magnitude = -lean_amount;
-        left_leg_height_base += magnitude * lean_right_span;
-        right_leg_height_base -= magnitude * lean_left_span;
+        left_position = (int16_t)(left_position + magnitude * ((float)SERVO_LEFT_MIN - left_position));
+        right_position = (int16_t)(right_position + magnitude * ((float)SERVO_RIGHT_MAX - right_position));
     }
-    left_leg_height_base = constrain(left_leg_height_base, kLegHeightBaseMin, kLegHeightBaseMax);
-    right_leg_height_base = constrain(right_leg_height_base, kLegHeightBaseMin, kLegHeightBaseMax);
-
-    int16_t left_position = (int16_t)(2048.0f + 8.4f * (30.0f - left_leg_height_base) - leg_position_add);
-    int16_t right_position = (int16_t)(2048.0f - 8.4f * (30.0f - right_leg_height_base) - leg_position_add);
 
     left_position = constrain(left_position, SERVO_LEFT_MIN, SERVO_LEFT_MAX);
     right_position = constrain(right_position, SERVO_RIGHT_MAX, SERVO_RIGHT_MIN);
