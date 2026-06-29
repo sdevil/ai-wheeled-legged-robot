@@ -4,6 +4,8 @@
 
 [中文文档](README.zh-CN.md) | English
 
+![WRobot - sdevil Enhanced prototype](docs/assets/wrobot-sdevil-enhanced.jpg)
+
 WRobot - sdevil Enhanced is an ESP32-based wheeled-legged robot platform for self-balancing
 motion, articulated leg actions, embedded vision, and future AI agent control.
 The ESP32 remains the real-time motion controller, while MaixCam or another AI
