@@ -1,4 +1,4 @@
-﻿import {
+import {
   BatteryFull,
   CenterFocusStrong,
   ContentCopy,
@@ -70,7 +70,7 @@ const copyByLanguage = {
     gamepadMac: 'Gamepad MAC address',
     diagnostics: 'Diagnostics', liveDiagnostics: 'Live diagnostics', refreshDiagnostics: 'Refresh', copyDiagnostics: 'Copy', diagnosticsCopied: 'Copied', diagnosticsCopyFailed: 'Copy failed',
     online: 'Online', offline: 'Offline', idle: 'Idle', standby: 'Standby', active: 'Active', sitting: 'Sitting', noTarget: 'No Target', selectTarget: 'Tap a detected target to lock; tap again to unlock',
-    moveControl: 'Drive Control', moveSpeed: 'Drive Speed', gimbalControl: 'Gimbal Control', gimbalSpeed: 'Gimbal Speed', legHeight: 'Leg Height', extendLegs: 'Extend legs', retractLegs: 'Retract legs', bodyLean: 'Body Lean', leanLeft: 'Lean left', leanRight: 'Lean right',
+    moveControl: 'Drive Control', moveSpeed: 'Drive Speed', gimbalControl: 'Gimbal Control', gimbalSpeed: 'Gimbal Speed', guard: 'Guard', legHeight: 'Leg Height', extendLegs: 'Extend legs', retractLegs: 'Retract legs', bodyLean: 'Body Lean', leanLeft: 'Lean left', leanRight: 'Lean right',
     robotStatus: 'Robot Status', oledPreview: 'OLED Face Preview', commonActions: 'Actions', settings: 'Settings', device: 'Device', network: 'Network', camera: 'Camera', maintenance: 'Advanced Maintenance',
     robot: 'Robot', detection: 'Target', attitude: 'Attitude', net: 'Network', battery: 'Battery', boardIp: 'Board IP', cameraStatus: 'Camera Status',
     stand: 'Stand', track: 'Track', sit: 'Sit', reset: 'Reset', jump: 'Jump', jumpForward: 'Jump Forward', jumpBackward: 'Jump Back', jumpLeft: 'Jump Left', jumpRight: 'Jump Right',
@@ -84,7 +84,7 @@ const copyByLanguage = {
     gamepadMac: '手柄 MAC 地址',
     diagnostics: '诊断', liveDiagnostics: '实时诊断', refreshDiagnostics: '刷新', copyDiagnostics: '复制', diagnosticsCopied: '已复制', diagnosticsCopyFailed: '复制失败',
     online: '在线', offline: '离线', idle: '空闲', standby: '待命', active: '运行中', sitting: '坐下', noTarget: '无目标', selectTarget: '点击识别目标锁定，再次点击解锁',
-    moveControl: '移动控制', moveSpeed: '移动速度', gimbalControl: '云台控制', gimbalSpeed: '云台速度', legHeight: '腿部高度', extendLegs: '伸腿', retractLegs: '缩腿', bodyLean: '左右侧身', leanLeft: '向左侧身', leanRight: '向右侧身',
+    moveControl: '移动控制', moveSpeed: '移动速度', gimbalControl: '云台控制', gimbalSpeed: '云台速度', guard: '护板', legHeight: '腿部高度', extendLegs: '伸腿', retractLegs: '缩腿', bodyLean: '左右侧身', leanLeft: '向左侧身', leanRight: '向右侧身',
     robotStatus: '机器人状态', oledPreview: '表情屏预览', commonActions: '模式与动作', settings: '设置', device: '设备', network: '网络', camera: '相机', maintenance: '高级维护',
     robot: '机器人', detection: '识别', attitude: '姿态', net: '网络', battery: '电量', boardIp: '主板 IP', cameraStatus: '相机状态',
     stand: '站立', track: '追踪', sit: '坐下', reset: '复位', jump: '原地跳', jumpForward: '前跳', jumpBackward: '后跳', jumpLeft: '左跳', jumpRight: '右跳',
@@ -262,6 +262,7 @@ const initialTelemetry: DashboardModel = {
   batteryVoltage: 0,
   legHeightPercent: 50,
   legLeanPercent: 0,
+  guardServoAngle: 0,
   wifiDbm: 0,
   fps: 0,
   latencyMs: 0,
@@ -307,7 +308,8 @@ export default function App() {
   const [homeWifiPassword, setHomeWifiPassword] = useState('');
   const [settingsMessage, setSettingsMessage] = useState('');
   const [driveSpeed, setDriveSpeed] = useState(100);
-  const [gimbalSpeed, setGimbalSpeed] = useState(100);
+  const gimbalSpeed = 100;
+  const [guardAngle, setGuardAngle] = useState(0);
   const [legHeightDraft, setLegHeightDraft] = useState<number | null>(null);
   const [legLeanDraft, setLegLeanDraft] = useState(0);
   const [drawerOpen, setDrawerOpen] = useState(false);
@@ -749,7 +751,7 @@ export default function App() {
                   footerLabel={copy.gimbalSpeed}
                   speedLabels={{ low: copy.low, medium: copy.medium, high: copy.high, extreme: copy.extreme }}
                   speedValue={gimbalSpeed}
-                  onSpeedChange={setGimbalSpeed}
+                  onSpeedChange={() => undefined}
                   onMove={(x, y) => {
                     void api.sendGimbal(x, y, gimbalSpeed);
                   }}
@@ -763,6 +765,16 @@ export default function App() {
                       onChange={(value) => {
                         setLegHeightDraft(value);
                         api.sendLegHeightValue(value);
+                      }}
+                    />
+                  }
+                  footerContent={
+                    <GuardSlider
+                      label={copy.guard}
+                      value={guardAngle}
+                      onChange={(value) => {
+                        setGuardAngle(value);
+                        api.sendGuardServo(value);
                       }}
                     />
                   }
@@ -1141,6 +1153,42 @@ export default function App() {
   );
 }
 
+function GuardSlider({
+  label,
+  value,
+  onChange,
+}: {
+  label: string;
+  value: number;
+  onChange: (value: number) => void;
+}) {
+  return (
+    <Box
+      sx={{
+        borderRadius: 1.4,
+        bgcolor: '#0d1220',
+        px: 0.85,
+        py: 0.72,
+      }}
+    >
+      <Stack direction="row" spacing={1.1} sx={{ alignItems: 'center' }}>
+        <Typography sx={{ color: '#79a9ff', fontWeight: 700, fontSize: 13 }}>
+          {label}
+        </Typography>
+        <Slider
+          value={value}
+          min={0}
+          max={180}
+          onChange={(_, nextValue) => onChange(nextValue as number)}
+          sx={{ color: '#4d8dff', flex: 1 }}
+        />
+        <Typography sx={{ fontWeight: 700, fontSize: 13, minWidth: 36, textAlign: 'right' }}>
+          {Math.round(value)}°
+        </Typography>
+      </Stack>
+    </Box>
+  );
+}
 function TopBar({
   telemetry,
   robotName,

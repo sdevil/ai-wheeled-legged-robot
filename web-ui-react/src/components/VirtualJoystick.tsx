@@ -10,6 +10,7 @@ interface VirtualJoystickProps {
   onEnd: () => void;
   speedLabels: { low: string; medium: string; high: string; extreme?: string };
   beforeFooter?: ReactNode;
+  footerContent?: ReactNode;
 }
 
 export function VirtualJoystick({
@@ -21,6 +22,7 @@ export function VirtualJoystick({
   onEnd,
   speedLabels,
   beforeFooter,
+  footerContent,
 }: VirtualJoystickProps) {
   const surfaceRef = useRef<HTMLDivElement | null>(null);
   const activePointerIdRef = useRef<number | null>(null);
@@ -173,31 +175,33 @@ export function VirtualJoystick({
         </Box>
       </Box>
       {beforeFooter}
-      <Box
-        sx={{
-          borderRadius: 1.4,
-          bgcolor: '#0d1220',
-          px: 0.85,
-          py: 0.72,
-        }}
-      >
-        <Stack direction="row" spacing={1.1} sx={{ alignItems: 'center' }}>
-          <Typography sx={{ color: '#79a9ff', fontWeight: 700, fontSize: 13 }}>
-            {footerLabel}
-          </Typography>
-          <Slider
-            value={speedValue}
-            min={15}
-            max={120}
-            onChange={(_, value) => onSpeedChange(value as number)}
-            sx={{
-              color: '#4d8dff',
-              flex: 1,
-            }}
-          />
-          <Typography sx={{ fontWeight: 700, fontSize: 13 }}>{speedLabel}</Typography>
-        </Stack>
-      </Box>
+      {footerContent ?? (
+        <Box
+          sx={{
+            borderRadius: 1.4,
+            bgcolor: '#0d1220',
+            px: 0.85,
+            py: 0.72,
+          }}
+        >
+          <Stack direction="row" spacing={1.1} sx={{ alignItems: 'center' }}>
+            <Typography sx={{ color: '#79a9ff', fontWeight: 700, fontSize: 13 }}>
+              {footerLabel}
+            </Typography>
+            <Slider
+              value={speedValue}
+              min={15}
+              max={120}
+              onChange={(_, value) => onSpeedChange(value as number)}
+              sx={{
+                color: '#4d8dff',
+                flex: 1,
+              }}
+            />
+            <Typography sx={{ fontWeight: 700, fontSize: 13 }}>{speedLabel}</Typography>
+          </Stack>
+        </Box>
+      )}
     </Stack>
   );
 }

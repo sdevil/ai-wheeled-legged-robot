@@ -221,6 +221,11 @@ void processWebControl() {
     setMotionTrigger(trigger);
     cameraGimbal().pitchDelta(cameraPitchDelta);
   }
+  int guardServoAngle = -1;
+  if (consumeWebGuardServoAngle(guardServoAngle)) {
+    commandMotion(MotionCommand::guardServo(guardServoAngle),
+                  String("web:guard:") + guardServoAngle);
+  }
 
   int joyX = 0;
   int joyY = 0;

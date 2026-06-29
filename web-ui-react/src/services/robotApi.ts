@@ -23,6 +23,7 @@ const mockModel = (host: string): DashboardModel => ({
   batteryVoltage: 0,
   legHeightPercent: 50,
   legLeanPercent: 0,
+  guardServoAngle: 0,
   wifiDbm: 0,
   fps: 0,
   latencyMs: 0,
@@ -175,6 +176,7 @@ export class RobotApi {
         batteryVoltage: data.battery_voltage,
         legHeightPercent: data.leg_height_percent ?? 50,
         legLeanPercent: data.leg_lean_percent ?? 0,
+        guardServoAngle: data.guard_angle ?? 0,
         wifiDbm: 0,
         fps: 0,
         latencyMs: 0,
@@ -413,6 +415,11 @@ export class RobotApi {
     const yaw = Math.round(curveAxis(x) * 72 * speedScale);
     const pitchDelta = Math.round(curveAxis(y) * 4 * speedScale);
     this.sendSocketNow({ type: 'gimbal', yaw, pitchDelta });
+  }
+
+  sendGuardServo(angle: number) {
+    const value = Math.max(0, Math.min(180, Math.round(angle)));
+    this.sendSocketNow({ type: 'guard_servo', angle: value });
   }
 
   sendLegHeight(direction: number) {

@@ -24,6 +24,7 @@ void initWebController();
 bool getWebDriveCommand(int &joyX, int &joyY);
 bool getWebGimbalYawCommand(int &joyX);
 int consumeWebCameraPitchDelta();
+bool consumeWebGuardServoAngle(int& angle);
 bool consumeWebLegHeightDirection(int& direction);
 bool consumeWebLegHeightPercent(int& percent);
 bool consumeWebLegLeanPercent(int& percent);

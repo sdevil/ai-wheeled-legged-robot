@@ -33,7 +33,6 @@ void CameraGimbalController::begin() {
   angleDeg_ = kCameraStandbyDeg;
   targetDeg_ = kCameraMaxDeg;
   cam_servo.set_angle((uint16_t)roundf(angleDeg_));
-  frontier_servo.set_angle(0);
   calibrationActive_ = true;
   calibrationStartedMs_ = millis();
   lastUpdateMs_ = 0;
@@ -79,6 +78,7 @@ void CameraGimbalController::pitchDelta(int deltaDeg) {
                          (float)kCameraMaxDeg);
 }
 
+
 void CameraGimbalController::trackVertical(int normalizedErrorY, bool locked,
                                            int confidence) {
   lastTrackSeenMs_ = millis();
@@ -109,7 +109,6 @@ void CameraGimbalController::trackVertical(int normalizedErrorY, bool locked,
 void CameraGimbalController::resetPose() {
   targetDeg_ = kCameraStandbyDeg;
   lastTrackStepDeg_ = 0;
-  frontier_servo.set_angle(0);
 }
 
 CameraGimbalTelemetry CameraGimbalController::telemetry() const {

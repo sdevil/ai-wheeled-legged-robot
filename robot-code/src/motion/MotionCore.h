@@ -17,6 +17,7 @@ struct MotionTelemetry {
   int legHeightPercent = 50;
   int legLeanPercent = 0;
   int legLeanActualPercent = 0;
+  int guardAngleDeg = 0;
   int leftLegPosition = 0;
   int rightLegPosition = 0;
   int leftLegLoad = 0;

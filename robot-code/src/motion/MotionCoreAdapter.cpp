@@ -1,10 +1,11 @@
-﻿#include "MotionCoreAdapter.h"
+#include "MotionCoreAdapter.h"
 
 #include <math.h>
 #include <string.h>
 
 #include "controller/controller.h"
 #include "Diagnostics.h"
+#include "devices/ptk7350.h"
 #include "motion_buttons.h"
 #include "system/task.h"
 
@@ -131,6 +132,7 @@ void MotionCoreAdapter::begin() {
   if (started_) return;
   started_ = true;
   ctrl.init();
+  setGuardServoAngle(0);
 
   // WiFi and the web server run on core 0. Keep the full motion pipeline on
   // core 1 so network activity cannot interrupt FOC output. Electrical angle
@@ -332,6 +334,7 @@ MotionTelemetry MotionCoreAdapter::telemetry() const {
   data.legLeanPercent = legLeanPercent();
   data.legLeanActualPercent =
       constrain((int)roundf(ctrl.leg_lean * 100.0f), -100, 100);
+  data.guardAngleDeg = guardServoAngleDeg_;
   data.leftLegPosition = sts_servo_state[0].position;
   data.rightLegPosition = sts_servo_state[1].position;
   data.leftLegLoad = sts_servo_state[0].load;
@@ -462,6 +465,11 @@ void MotionCoreAdapter::updateLegHeightTarget(uint32_t now) {
     legHeightTargetActive_ = false;
     ctrl.symmetric_leg_motion = 0;
   }
+}
+
+void MotionCoreAdapter::setGuardServoAngle(int angleDeg) {
+  guardServoAngleDeg_ = constrain(angleDeg, 0, 180);
+  frontier_servo.set_angle((uint16_t)guardServoAngleDeg_);
 }
 
 void MotionCoreAdapter::pulseButton(uint16_t button, uint32_t durationMs) {

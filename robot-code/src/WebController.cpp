@@ -1,4 +1,4 @@
-﻿#include "WebController.h"
+#include "WebController.h"
 
 #include <DNSServer.h>
 #include <ESPmDNS.h>
@@ -65,8 +65,8 @@ constexpr char PREF_UI_LANGUAGE[] = "ui_language";
 constexpr char DEFAULT_UI_LANGUAGE[] = "en";
 constexpr char DEFAULT_ROBOT_NAME[] = "WRobot-sdevil";
 constexpr char DEFAULT_CAMERA_RESOLUTION[] = "640x480";
-constexpr char ROBOT_FIRMWARE_VERSION[] = "3.2.132";
-constexpr char ROBOT_FIRMWARE_BUILD[] = "2026-06-29-public-release-cleanup-01";
+constexpr char ROBOT_FIRMWARE_VERSION[] = "3.2.133";
+constexpr char ROBOT_FIRMWARE_BUILD[] = "2026-06-30-guard-servo-ui-01";
 constexpr unsigned long CAMERA_STATUS_STALE_MS = 5000;
 constexpr char CONTROL_MODE_WIFI[] = "wifi";
 constexpr char CONTROL_MODE_GAMEPAD[] = "gamepad";
@@ -90,6 +90,7 @@ int gimbalYawX = 0;
 bool gimbalYawActive = false;
 unsigned long lastGimbalYawMs = 0;
 int pendingCameraPitchDelta = 0;
+int pendingGuardServoAngle = -1;
 int pendingLegHeightDirection = 99;
 int pendingLegHeightPercent = -1;
 int pendingLegLeanPercent = 999;
@@ -767,6 +768,7 @@ void sendJsonStatus() {
                 ",\"battery_percent\":" + String(batteryPercent) +
                 ",\"leg_height_percent\":" + String(legHeightPercent) +
                 ",\"leg_lean_percent\":" + String(legLeanPercent) +
+                ",\"guard_angle\":" + String(motionCore().telemetry().guardAngleDeg) +
                 ",\"ota_progress\":" + String(otaProgress) +
                 ",\"ota_message\":\"" + jsonEscape(otaMessage) + "\"" +
                 ",\"robot_net_state\":\"" + jsonEscape(robotNetState) + "\"" +
@@ -1053,6 +1055,18 @@ void queueCameraPitchDelta(int delta) {
   portEXIT_CRITICAL(&stateMux);
 }
 
+bool setGuardServoAngleCommand(int angle) {
+  lockStatus();
+  const bool controlsLocked = statusMaintenanceMode || statusOtaInProgress;
+  unlockStatus();
+  if (controlsLocked) return false;
+  angle = constrain(angle, 0, 180);
+  portENTER_CRITICAL(&stateMux);
+  pendingGuardServoAngle = angle;
+  portEXIT_CRITICAL(&stateMux);
+  return true;
+}
+
 bool setLegHeightCommand(int direction) {
   lockStatus();
   const bool controlsLocked = statusMaintenanceMode || statusOtaInProgress;
@@ -1255,6 +1269,14 @@ void handleWebSocketMessage(const String& message) {
     pitchDelta = constrain(pitchDelta, -4, 4);
     if (pitchDelta != 0) queueCameraPitchDelta(pitchDelta);
     sendWebSocketAck("gimbal", requestId, true);
+    return;
+  }
+
+  if (type == "guard_servo") {
+    int angle = 0;
+    const bool accepted = jsonIntValue(message, "angle", angle) &&
+                          setGuardServoAngleCommand(angle);
+    sendWebSocketAck("guard_servo", requestId, accepted);
     return;
   }
 
@@ -1912,6 +1934,18 @@ int consumeWebCameraPitchDelta() {
   pendingCameraPitchDelta = 0;
   portEXIT_CRITICAL(&stateMux);
   return delta;
+}
+
+bool consumeWebGuardServoAngle(int& angle) {
+  portENTER_CRITICAL(&stateMux);
+  if (pendingGuardServoAngle < 0) {
+    portEXIT_CRITICAL(&stateMux);
+    return false;
+  }
+  angle = pendingGuardServoAngle;
+  pendingGuardServoAngle = -1;
+  portEXIT_CRITICAL(&stateMux);
+  return true;
 }
 
 bool consumeWebLegHeightDirection(int& direction) {

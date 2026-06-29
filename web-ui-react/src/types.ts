@@ -29,6 +29,7 @@ export interface RobotStatus {
   camera_net_message: string;
   camera_url?: string;
   camera_resolution: string;
+  guard_angle?: number;
   camera_detect_label: string;
   camera_detect_count: number;
   active_mode: string;
@@ -53,6 +54,7 @@ export interface DashboardModel {
   batteryVoltage: number;
   legHeightPercent: number;
   legLeanPercent: number;
+  guardServoAngle: number;
   wifiDbm: number;
   fps: number;
   latencyMs: number;

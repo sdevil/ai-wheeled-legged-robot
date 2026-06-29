@@ -31,6 +31,7 @@ enum class MotionCommandType : uint8_t {
   LegLean,
   LegHeight,
   LegHeightPercent,
+  GuardServo,
   MaintenanceEnter,
   MaintenanceExit
 };
@@ -90,6 +91,12 @@ struct MotionCommand {
     MotionCommand command;
     command.type = MotionCommandType::LegHeightPercent;
     command.y = constrain(percent, 0, 100);
+    return command;
+  }
+  static MotionCommand guardServo(int angleDeg) {
+    MotionCommand command;
+    command.type = MotionCommandType::GuardServo;
+    command.x = constrain(angleDeg, 0, 180);
     return command;
   }
 

@@ -23,6 +23,7 @@ class MotionCoreAdapter final : public MotionCore {
   void updateTrackingMotion(uint32_t now);
   void updateStandNudge(uint32_t now);
   void updateLegHeightTarget(uint32_t now);
+  void setGuardServoAngle(int angleDeg);
   int legHeightPercent() const;
   int legLeanPercent() const;
   float legHeightBaseFromPercent(int percent) const;
@@ -83,6 +84,7 @@ class MotionCoreAdapter final : public MotionCore {
   bool standNudgePending_ = false;
   float legHeightBaseTarget_ = 0.0f;
   uint32_t lastLegHeightUpdateMs_ = 0;
+  int guardServoAngleDeg_ = 0;
 };
 
 MotionCoreAdapter& motionCore();
