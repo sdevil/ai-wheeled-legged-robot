@@ -2012,6 +2012,7 @@ function LeanSlider({
   const [displayValue, setDisplayValue] = useState(value);
   const onChangeRef = useRef(onChange);
   const heartbeatRef = useRef<number | null>(null);
+  const springRef = useRef<number | null>(null);
   const trackRef = useRef<HTMLDivElement | null>(null);
   const activePointerIdRef = useRef<number | null>(null);
 
@@ -2031,14 +2032,33 @@ function LeanSlider({
     }
   };
 
+  const stopSpring = () => {
+    if (springRef.current !== null) {
+      window.clearInterval(springRef.current);
+      springRef.current = null;
+    }
+  };
+
   const release = useCallback(() => {
     if (!activeRef.current) return;
     activeRef.current = false;
     activePointerIdRef.current = null;
     stopHeartbeat();
-    valueRef.current = 0;
-    setDisplayValue(0);
-    onChangeRef.current(0);
+    stopSpring();
+
+    springRef.current = window.setInterval(() => {
+      const current = valueRef.current;
+      if (current === 0) {
+        stopSpring();
+        return;
+      }
+      const magnitude = Math.max(0, Math.abs(current) - 12);
+      const nextValue = magnitude === 0 ? 0 : Math.sign(current) * magnitude;
+      valueRef.current = nextValue;
+      setDisplayValue(nextValue);
+      onChangeRef.current(nextValue);
+      if (nextValue === 0) stopSpring();
+    }, 35);
   }, []);
 
   useEffect(() => {
@@ -2051,6 +2071,7 @@ function LeanSlider({
     return () => {
       window.removeEventListener('pointerup', handleWindowPointerUp);
       stopHeartbeat();
+      stopSpring();
     };
   }, [release]);
 
@@ -2067,6 +2088,7 @@ function LeanSlider({
   };
 
   const startHeartbeat = () => {
+    stopSpring();
     activeRef.current = true;
     if (heartbeatRef.current !== null) return;
     heartbeatRef.current = window.setInterval(() => {
