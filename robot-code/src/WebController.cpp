@@ -65,7 +65,7 @@ constexpr char PREF_UI_LANGUAGE[] = "ui_language";
 constexpr char DEFAULT_UI_LANGUAGE[] = "en";
 constexpr char DEFAULT_ROBOT_NAME[] = "WRobot-sdevil";
 constexpr char DEFAULT_CAMERA_RESOLUTION[] = "640x480";
-constexpr char ROBOT_FIRMWARE_VERSION[] = "3.2.124";
+constexpr char ROBOT_FIRMWARE_VERSION[] = "3.2.125";
 constexpr char ROBOT_FIRMWARE_BUILD[] = "2026-06-29-public-release-cleanup-01";
 constexpr unsigned long CAMERA_STATUS_STALE_MS = 5000;
 constexpr char CONTROL_MODE_WIFI[] = "wifi";
@@ -94,12 +94,16 @@ int pendingLegHeightDirection = 99;
 int pendingLegHeightPercent = -1;
 int pendingLegLeanPercent = 999;
 char pendingLegLeanSource[32] = "boot";
+int lastLegLeanPercent = 0;
+char lastLegLeanSource[32] = "boot";
 unsigned long lastDriveCommandMs = 0;
 uint32_t driveCommandCount = 0;
 uint32_t driveCommandMaxGapMs = 0;
 uint32_t websocketCloseCount = 0;
 unsigned long lastLegHeightCommandMs = 0;
 unsigned long lastLegLeanCommandMs = 0;
+uint32_t legLeanCommandCount = 0;
+uint32_t legLeanCommandMaxGapMs = 0;
 QueueHandle_t actionQueue = nullptr;
 SemaphoreHandle_t statusMutex = nullptr;
 
@@ -300,6 +304,11 @@ void handleDiagnostics() {
   uint32_t currentDriveMaxGapMs;
   int currentPendingLegLean;
   char currentPendingLegLeanSource[32];
+  int currentLastLegLean;
+  char currentLastLegLeanSource[32];
+  unsigned long currentLastLegLeanMs;
+  uint32_t currentLegLeanCommandCount;
+  uint32_t currentLegLeanMaxGapMs;
   uint32_t currentWebsocketCloseCount;
 
   lockStatus();
@@ -327,11 +336,20 @@ void handleDiagnostics() {
   strncpy(currentPendingLegLeanSource, pendingLegLeanSource,
           sizeof(currentPendingLegLeanSource) - 1);
   currentPendingLegLeanSource[sizeof(currentPendingLegLeanSource) - 1] = '\0';
+  currentLastLegLean = lastLegLeanPercent;
+  strncpy(currentLastLegLeanSource, lastLegLeanSource,
+          sizeof(currentLastLegLeanSource) - 1);
+  currentLastLegLeanSource[sizeof(currentLastLegLeanSource) - 1] = '\0';
+  currentLastLegLeanMs = lastLegLeanCommandMs;
+  currentLegLeanCommandCount = legLeanCommandCount;
+  currentLegLeanMaxGapMs = legLeanCommandMaxGapMs;
   currentWebsocketCloseCount = websocketCloseCount;
   portEXIT_CRITICAL(&stateMux);
 
   const unsigned long driveAgeMs =
       currentDriveUpdatedAt == 0 ? 0 : millis() - currentDriveUpdatedAt;
+  const unsigned long legLeanAgeMs =
+      currentLastLegLeanMs == 0 ? 0 : millis() - currentLastLegLeanMs;
   const unsigned long nowMs = millis();
   const unsigned long cameraStatusAgeMs =
       cameraLastSeenMs == 0 ? 0 : nowMs - cameraLastSeenMs;
@@ -395,6 +413,11 @@ void handleDiagnostics() {
          ",\"max_command_gap_ms\":" + String(currentDriveMaxGapMs) +
          ",\"pending_leg_lean\":" + String(currentPendingLegLean == 999 ? 0 : currentPendingLegLean) +
          ",\"pending_leg_lean_source\":\"" + jsonEscape(currentPendingLegLeanSource) + "\"" +
+         ",\"last_leg_lean\":" + String(currentLastLegLean) +
+         ",\"last_leg_lean_source\":\"" + jsonEscape(currentLastLegLeanSource) + "\"" +
+         ",\"last_leg_lean_age_ms\":" + String(legLeanAgeMs) +
+         ",\"leg_lean_count\":" + String(currentLegLeanCommandCount) +
+         ",\"leg_lean_max_gap_ms\":" + String(currentLegLeanMaxGapMs) +
          ",\"websocket_close_count\":" + String(currentWebsocketCloseCount) + "}" +
          ",\"camera\":{\"state\":\"" + jsonEscape(cameraState) +
          "\",\"ip\":\"" + jsonEscape(cameraIp) +
@@ -1061,12 +1084,21 @@ bool setLegLeanCommand(int percent, const char* source) {
   unlockStatus();
   if (controlsLocked) return false;
   percent = constrain(percent, -100, 100);
+  const unsigned long nowMs = millis();
   portENTER_CRITICAL(&stateMux);
+  if (lastLegLeanCommandMs != 0) {
+    const uint32_t gap = nowMs - lastLegLeanCommandMs;
+    if (gap > legLeanCommandMaxGapMs) legLeanCommandMaxGapMs = gap;
+  }
+  ++legLeanCommandCount;
   pendingLegLeanPercent = percent;
   strncpy(pendingLegLeanSource, source == nullptr ? "unknown" : source,
           sizeof(pendingLegLeanSource) - 1);
   pendingLegLeanSource[sizeof(pendingLegLeanSource) - 1] = '\0';
-  lastLegLeanCommandMs = 0;
+  lastLegLeanPercent = percent;
+  strncpy(lastLegLeanSource, pendingLegLeanSource, sizeof(lastLegLeanSource) - 1);
+  lastLegLeanSource[sizeof(lastLegLeanSource) - 1] = '\0';
+  lastLegLeanCommandMs = nowMs;
   portEXIT_CRITICAL(&stateMux);
   return true;
 }

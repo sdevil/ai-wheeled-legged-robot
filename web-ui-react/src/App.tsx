@@ -2047,14 +2047,9 @@ function LeanSlider({
           event.pointerId !== activePointerIdRef.current) return;
       release();
     };
-    const handleWindowRelease = () => release();
     window.addEventListener('pointerup', handleWindowPointerUp);
-    window.addEventListener('mouseup', handleWindowRelease);
-    window.addEventListener('touchend', handleWindowRelease);
     return () => {
       window.removeEventListener('pointerup', handleWindowPointerUp);
-      window.removeEventListener('mouseup', handleWindowRelease);
-      window.removeEventListener('touchend', handleWindowRelease);
       stopHeartbeat();
     };
   }, [release]);
