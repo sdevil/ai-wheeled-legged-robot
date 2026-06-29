@@ -65,7 +65,7 @@ constexpr char PREF_UI_LANGUAGE[] = "ui_language";
 constexpr char DEFAULT_UI_LANGUAGE[] = "en";
 constexpr char DEFAULT_ROBOT_NAME[] = "WRobot-sdevil";
 constexpr char DEFAULT_CAMERA_RESOLUTION[] = "640x480";
-constexpr char ROBOT_FIRMWARE_VERSION[] = "3.2.116";
+constexpr char ROBOT_FIRMWARE_VERSION[] = "3.2.117";
 constexpr char ROBOT_FIRMWARE_BUILD[] = "2026-06-29-public-release-cleanup-01";
 constexpr unsigned long CAMERA_STATUS_STALE_MS = 5000;
 constexpr char CONTROL_MODE_WIFI[] = "wifi";
@@ -1050,7 +1050,7 @@ bool setLegLeanCommand(int percent) {
   percent = constrain(percent, -100, 100);
   portENTER_CRITICAL(&stateMux);
   pendingLegLeanPercent = percent;
-  lastLegLeanCommandMs = percent == 0 ? 0 : millis();
+  lastLegLeanCommandMs = 0;
   portEXIT_CRITICAL(&stateMux);
   return true;
 }
@@ -1485,11 +1485,6 @@ void expireLegControlCommands() {
       now - lastLegHeightCommandMs > timeoutMs) {
     pendingLegHeightDirection = 0;
     lastLegHeightCommandMs = 0;
-  }
-  if (lastLegLeanCommandMs != 0 &&
-      now - lastLegLeanCommandMs > timeoutMs) {
-    pendingLegLeanPercent = 0;
-    lastLegLeanCommandMs = 0;
   }
   portEXIT_CRITICAL(&stateMux);
 }
@@ -1976,6 +1971,7 @@ bool isWebCameraScanPending() {
   unlockStatus();
   return pending;
 }
+
 
 
 
