@@ -38,7 +38,7 @@ import {
   ThemeProvider,
   Typography,
 } from '@mui/material';
-import { useEffect, useMemo, useRef, useState, type PointerEvent, type ReactNode } from 'react';
+import { useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent, type ReactNode, type TouchEvent as ReactTouchEvent } from 'react';
 
 import { VirtualJoystick } from './components/VirtualJoystick';
 import { RobotApi } from './services/robotApi';
@@ -2001,8 +2001,12 @@ function LeanSlider({
   onRelease: () => void;
 }) {
   const activeRef = useRef(false);
+  const valueRef = useRef(value);
   const heartbeatRef = useRef<number | null>(null);
-  const holdValueRef = useRef(0);
+
+  useEffect(() => {
+    valueRef.current = value;
+  }, [value]);
 
   const release = () => {
     if (!activeRef.current) return;
@@ -2015,12 +2019,18 @@ function LeanSlider({
   };
 
   useEffect(() => {
-    window.addEventListener('pointerup', release);
-    window.addEventListener('pointercancel', release);
+    document.addEventListener('pointerup', release);
+    document.addEventListener('pointercancel', release);
+    document.addEventListener('mouseup', release);
+    document.addEventListener('touchend', release);
+    document.addEventListener('touchcancel', release);
     window.addEventListener('blur', release);
     return () => {
-      window.removeEventListener('pointerup', release);
-      window.removeEventListener('pointercancel', release);
+      document.removeEventListener('pointerup', release);
+      document.removeEventListener('pointercancel', release);
+      document.removeEventListener('mouseup', release);
+      document.removeEventListener('touchend', release);
+      document.removeEventListener('touchcancel', release);
       window.removeEventListener('blur', release);
       if (heartbeatRef.current !== null) {
         window.clearInterval(heartbeatRef.current);
@@ -2028,19 +2038,23 @@ function LeanSlider({
     };
   }, []);
 
-  const startHold = (nextValue: number) => (event: PointerEvent) => {
+  const startHeartbeat = () => {
     activeRef.current = true;
-    holdValueRef.current = nextValue;
-    onChange(nextValue);
-    event.currentTarget.setPointerCapture?.(event.pointerId);
-    event.preventDefault();
-    event.stopPropagation();
     if (heartbeatRef.current !== null) return;
     heartbeatRef.current = window.setInterval(() => {
       if (activeRef.current) {
-        onChange(holdValueRef.current);
+        onChange(valueRef.current);
       }
     }, 80);
+  };
+
+  const handlePointerStart = (event: ReactPointerEvent) => {
+    startHeartbeat();
+    event.currentTarget.setPointerCapture?.(event.pointerId);
+  };
+
+  const handleTouchStart = (_event: ReactTouchEvent) => {
+    startHeartbeat();
   };
 
   return (
@@ -2053,46 +2067,45 @@ function LeanSlider({
           {value > 0 ? `R ${value}%` : value < 0 ? `L ${Math.abs(value)}%` : '0%'}
         </Typography>
       </Stack>
-      <Stack direction="row" spacing={0.7} sx={{ alignItems: 'center' }}>
-        <Button
-          variant={value < 0 ? 'contained' : 'outlined'}
-          aria-label="Lean left"
-          onPointerDown={startHold(-100)}
+      <Stack direction="row" spacing={0.6} sx={{ alignItems: 'center' }}>
+        <KeyboardArrowLeft sx={{ color: '#79a9ff', fontSize: 18 }} />
+        <Slider
+          value={value}
+          min={-100}
+          max={100}
+          step={1}
+          marks={[{ value: 0 }]}
+          onPointerDownCapture={handlePointerStart}
+          onTouchStartCapture={handleTouchStart}
+          onMouseDownCapture={startHeartbeat}
+          onChange={(_, next) => {
+            const nextValue = Array.isArray(next) ? next[0] : next;
+            valueRef.current = nextValue;
+            activeRef.current = true;
+            onChange(nextValue);
+          }}
+          aria-label={label}
           sx={{
             flex: 1,
-            minWidth: 0,
-            minHeight: 30,
-            borderRadius: 2,
-            px: 0,
-            color: '#dbe7ff',
-            borderColor: 'rgba(72,137,255,.35)',
-            bgcolor: value < 0 ? 'rgba(47,120,255,.55)' : 'rgba(16,25,42,.82)',
+            '& .MuiSlider-thumb': {
+              width: 18,
+              height: 18,
+              boxShadow: '0 0 18px rgba(72,137,255,.7)',
+            },
+            '& .MuiSlider-track': { height: 6 },
+            '& .MuiSlider-rail': { height: 6, opacity: 0.28 },
+            '& .MuiSlider-mark': {
+              width: 2,
+              height: 12,
+              bgcolor: 'rgba(255,255,255,.55)',
+            },
           }}
-        >
-          <KeyboardArrowLeft sx={{ fontSize: 19 }} />
-        </Button>
-        <Button
-          variant={value > 0 ? 'contained' : 'outlined'}
-          aria-label="Lean right"
-          onPointerDown={startHold(100)}
-          sx={{
-            flex: 1,
-            minWidth: 0,
-            minHeight: 30,
-            borderRadius: 2,
-            px: 0,
-            color: '#dbe7ff',
-            borderColor: 'rgba(72,137,255,.35)',
-            bgcolor: value > 0 ? 'rgba(47,120,255,.55)' : 'rgba(16,25,42,.82)',
-          }}
-        >
-          <KeyboardArrowRight sx={{ fontSize: 18 }} />
-        </Button>
+        />
+        <KeyboardArrowRight sx={{ color: '#79a9ff', fontSize: 18 }} />
       </Stack>
     </Box>
   );
 }
-
 function SmallActionButton({
   children,
   onClick,
@@ -2122,6 +2135,7 @@ const miniRoundButtonSx = {
   bgcolor: '#0f1320',
   border: '1px solid #263041',
 };
+
 
 
 
