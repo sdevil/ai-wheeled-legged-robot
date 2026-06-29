@@ -292,7 +292,7 @@ export default function App() {
   const [uiLanguage, setUiLanguage] = useState<UiLanguage>(initialUiLanguage);
   const copy = copyByLanguage[uiLanguage];
   const [controlMode, setControlMode] = useState(initialControlMode);
-  const [gamepadMac, setGamepadMac] = useState('ac:00:03:28:ad:60');
+  const [gamepadMac, setGamepadMac] = useState('');
   const [host, setHost] = useState(initialHost);
   const [hostDraft, setHostDraft] = useState(initialHost);
   const [cameraUrl, setCameraUrl] = useState(initialCameraUrl);
@@ -381,7 +381,7 @@ export default function App() {
   function applySettingsToUi(settings: RobotSettings) {
     setRobotName(settings.robot_name || DEFAULT_ROBOT_NAME);
     setControlMode(settings.control_mode || initialControlMode);
-    setGamepadMac(settings.gamepad_mac || 'ac:00:03:28:ad:60');
+    setGamepadMac(settings.gamepad_mac || '');
     const nextLanguage = settings.ui_language === 'zh' ? 'zh' : 'en';
     setUiLanguage(nextLanguage);
     setHomeWifiSsid(settings.robot_wifi_ssid || '');

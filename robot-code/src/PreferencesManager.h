@@ -5,8 +5,8 @@
 
 #define PREF_MAC_ADDRESS_KEY "mac_address"
 #define PREFERENCES_NAMESPACE "wrobot_esp32"
-// MAC used by the controller in the original known-good WRobot firmware.
-#define DEFAULT_BLUETOOTH_MAC "ac:00:03:28:ad:60"
+// Users should set their own gamepad MAC address from the Web UI.
+#define DEFAULT_BLUETOOTH_MAC ""
 
 extern Preferences prefManager;
 

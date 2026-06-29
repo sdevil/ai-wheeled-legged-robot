@@ -20,7 +20,7 @@ inline XboxSeriesXControllerESP32_asukiaaa::Core& getGamepadController() {
   static String macAddress = getPrefBluetoothMacAddress();
   macAddress.trim();
   macAddress.toLowerCase();
-  if (macAddress == "0a:27:12:5c:71:79" || macAddress.length() != 17) {
+  if (macAddress.length() != 17) {
     macAddress = DEFAULT_BLUETOOTH_MAC;
   }
   static XboxSeriesXControllerESP32_asukiaaa::Core instance(macAddress.c_str());

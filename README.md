@@ -150,14 +150,9 @@ attribution and provenance.
 
 ## License Status
 
-No project-wide license has been selected yet. At the time of review, neither
-upstream repository contained a root license file. Public source availability
-alone does not grant redistribution or relicensing rights. Upstream permission
-and licensing must be clarified before a public release of derived code.
+No project-wide license has been selected yet. The current project code,
+organization, Web UI, MaixCam integration, OTA/settings work, and motion-control
+integration are maintained by **sdevil**.
 
 Bundled third-party libraries remain subject to their own license files. See
 [NOTICE](NOTICE.md) before redistributing this repository.
-
-This repository is intended for public source sharing, learning, and
-collaboration. It is not currently presented as an OSI-licensed open-source
-distribution because the upstream licensing terms still need clarification.
