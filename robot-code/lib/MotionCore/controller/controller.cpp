@@ -631,7 +631,10 @@ void controller::leg_loop()
     int16_t left_position = (int16_t)(2048.0f + 8.4f * (30.0f - leg_height_base) - leg_position_add);
     int16_t right_position = (int16_t)(2048.0f - 8.4f * (30.0f - leg_height_base) - leg_position_add);
 
-    const float lean_amount = constrain(leg_lean, -1.0f, 1.0f);
+    const float lean_input = constrain(leg_lean, -1.0f, 1.0f);
+    const float lean_amount = lean_input == 0.0f
+        ? 0.0f
+        : copysignf(powf(fabsf(lean_input), 0.55f), lean_input);
     if(lean_amount > 0.0f)
     {
         left_position = (int16_t)(left_position + lean_amount * ((float)SERVO_LEFT_MAX - left_position));
