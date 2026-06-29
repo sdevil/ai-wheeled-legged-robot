@@ -161,6 +161,7 @@ void MotionCoreAdapter::command(const MotionCommand& command) {
       ctrl.symmetric_leg_motion = 0;
       heldPostureButtons_ = 0;
       ctrl.roll_adjust_target = 0.0f;
+      ctrl.leg_lean = 0.0f;
       ctrl.leg_lean_target = 0.0f;
       standNudgePending_ = false;
       standNudgeBalanceSinceMs_ = 0;
@@ -177,6 +178,7 @@ void MotionCoreAdapter::command(const MotionCommand& command) {
       heldPostureButtons_ = 0;
       enterTrackingState(TrackObservationState::Idle);
       ctrl.roll_adjust_target = 0.0f;
+      ctrl.leg_lean = 0.0f;
       ctrl.leg_lean_target = 0.0f;
       stopMove();
       pulseButton(BTN_LB, 120);

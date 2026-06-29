@@ -503,6 +503,9 @@ export default function App() {
     try {
       const accepted = await api.sendAction(nextAction);
       if (!accepted && isTrackToggle) setSettingsMessage('Command rejected');
+      if (accepted && ['stand', 'sit', 'reset'].includes(nextAction)) {
+        setLegLeanDraft(0);
+      }
       if (accepted && isTrackToggle && nextAction === 'track_mode') {
         await api.sendTrackScan();
       }
@@ -2002,6 +2005,8 @@ function LeanSlider({
 }) {
   const activeRef = useRef(false);
   const valueRef = useRef(value);
+  const onChangeRef = useRef(onChange);
+  const onReleaseRef = useRef(onRelease);
   const heartbeatRef = useRef<number | null>(null);
   const trackRef = useRef<HTMLDivElement | null>(null);
   const activePointerIdRef = useRef<number | null>(null);
@@ -2009,6 +2014,11 @@ function LeanSlider({
   useEffect(() => {
     valueRef.current = value;
   }, [value]);
+
+  useEffect(() => {
+    onChangeRef.current = onChange;
+    onReleaseRef.current = onRelease;
+  }, [onChange, onRelease]);
 
   const stopHeartbeat = () => {
     if (heartbeatRef.current !== null) {
@@ -2022,8 +2032,8 @@ function LeanSlider({
     activeRef.current = false;
     activePointerIdRef.current = null;
     stopHeartbeat();
-    onRelease();
-  }, [onRelease]);
+    onReleaseRef.current();
+  }, []);
 
   useEffect(() => {
     window.addEventListener('pointerup', release);
@@ -2045,15 +2055,15 @@ function LeanSlider({
     const ratio = Math.max(0, Math.min(1, (clientX - rect.left) / rect.width));
     const nextValue = Math.round(ratio * 200 - 100);
     valueRef.current = nextValue;
-    onChange(nextValue);
+    onChangeRef.current(nextValue);
   };
 
   const startHeartbeat = () => {
     activeRef.current = true;
     if (heartbeatRef.current !== null) return;
     heartbeatRef.current = window.setInterval(() => {
-      if (activeRef.current) onChange(valueRef.current);
-    }, 80);
+      if (activeRef.current) onChangeRef.current(valueRef.current);
+    }, 50);
   };
 
   const handlePointerDown = (event: ReactPointerEvent<HTMLDivElement>) => {
