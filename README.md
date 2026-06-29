@@ -59,6 +59,9 @@ The AI or vision module does not directly drive motors. See
 
 ## Quick Start
 
+Current stable baseline: robot firmware `3.2.111` with MaixCam app `3.2.29`.
+See [Firmware Version Notes](docs/FIRMWARE_VERSIONS.md).
+
 ### Build the robot firmware
 
 ```powershell
