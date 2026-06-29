@@ -193,6 +193,8 @@ void processWebControl() {
   static int lastNonZeroWebJoyY = 0;
   static unsigned long webZeroSinceMs = 0;
   static unsigned long lastTrackScanRetryMs = 0;
+  static int lastLegHeightPercentSent = -1;
+  static unsigned long lastLegHeightPercentDispatchMs = 0;
   dispatchWebAction(consumeWebRobotAction());
   if (trace_mode && isWebCameraScanPending() &&
       millis() - lastTrackScanRetryMs >= 1000) {
@@ -201,8 +203,16 @@ void processWebControl() {
   }
   int legHeightPercent = -1;
   if (consumeWebLegHeightPercent(legHeightPercent)) {
-    commandMotion(MotionCommand::legHeightPercent(legHeightPercent),
-                  String("web:leg_height_value:") + legHeightPercent);
+    const unsigned long now = millis();
+    if (legHeightPercent != lastLegHeightPercentSent ||
+        now - lastLegHeightPercentDispatchMs >= 40) {
+      commandMotion(MotionCommand::legHeightPercent(legHeightPercent),
+                    String("web:leg_height_value:") + legHeightPercent);
+      lastLegHeightPercentSent = legHeightPercent;
+      lastLegHeightPercentDispatchMs = now;
+    }
+  } else {
+    lastLegHeightPercentSent = -1;
   }
   int legHeightDirection = 0;
   if (consumeWebLegHeightDirection(legHeightDirection)) {

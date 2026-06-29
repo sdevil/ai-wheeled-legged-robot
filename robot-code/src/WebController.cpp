@@ -65,8 +65,8 @@ constexpr char PREF_UI_LANGUAGE[] = "ui_language";
 constexpr char DEFAULT_UI_LANGUAGE[] = "en";
 constexpr char DEFAULT_ROBOT_NAME[] = "WRobot-sdevil";
 constexpr char DEFAULT_CAMERA_RESOLUTION[] = "640x480";
-constexpr char ROBOT_FIRMWARE_VERSION[] = "3.2.142";
-constexpr char ROBOT_FIRMWARE_BUILD[] = "2026-06-30-stand-leg-sync-01";
+constexpr char ROBOT_FIRMWARE_VERSION[] = "3.2.143";
+constexpr char ROBOT_FIRMWARE_BUILD[] = "2026-06-30-leg-height-hold-01";
 constexpr unsigned long CAMERA_STATUS_STALE_MS = 5000;
 constexpr char CONTROL_MODE_WIFI[] = "wifi";
 constexpr char CONTROL_MODE_GAMEPAD[] = "gamepad";
@@ -1073,6 +1073,7 @@ bool setLegHeightCommand(int direction) {
   if (controlsLocked) return false;
   direction = constrain(direction, -1, 1);
   portENTER_CRITICAL(&stateMux);
+  pendingLegHeightPercent = -1;
   pendingLegHeightDirection = direction;
   lastLegHeightCommandMs = direction == 0 ? 0 : millis();
   portEXIT_CRITICAL(&stateMux);
@@ -1966,7 +1967,6 @@ bool consumeWebLegHeightPercent(int& percent) {
     return false;
   }
   percent = pendingLegHeightPercent;
-  pendingLegHeightPercent = -1;
   portEXIT_CRITICAL(&stateMux);
   return true;
 }

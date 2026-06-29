@@ -35,6 +35,7 @@ class MotionCoreAdapter final : public MotionCore {
   bool started_ = false;
   bool maintenance_ = false;
   bool tracking_ = false;
+  int legHeightTargetPercent_ = -1;
   bool trackHasLockedTarget_ = false;
   bool trackReturnScanSent_ = false;
   uint16_t pulseButtons_ = 0;
