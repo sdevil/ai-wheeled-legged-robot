@@ -50,7 +50,6 @@ const mockModel = (host: string): DashboardModel => ({
 
 export type SaveResult = { ok: boolean; message: string; connectionLost?: boolean };
 type AckWaiter = { resolve: (ok: boolean) => void; timer: number };
-type DrivePayload = { x: number; y: number };
 
 export class RobotApi {
   private ws?: WebSocket;
@@ -60,14 +59,6 @@ export class RobotApi {
   private transportMode: TransportMode;
   private requestId = 1;
   private ackWaiters = new Map<number, AckWaiter>();
-  private pendingHttpDrive: DrivePayload | null = null;
-  private httpDrivePumpRunning = false;
-  private pendingHttpPitch: number | null = null;
-  private httpPitchPumpRunning = false;
-  private pendingHttpLegHeight: number | null = null;
-  private httpLegHeightPumpRunning = false;
-  private pendingHttpLegLean: number | null = null;
-  private httpLegLeanPumpRunning = false;
 
   constructor(host: string, transportMode: TransportMode) {
     this.host = host;
@@ -340,98 +331,6 @@ export class RobotApi {
     return promise;
   }
 
-  private queueHttpDrive(payload: DrivePayload) {
-    this.pendingHttpDrive = payload;
-    if (!this.httpDrivePumpRunning) void this.pumpHttpDrive();
-  }
-
-  private async pumpHttpDrive() {
-    this.httpDrivePumpRunning = true;
-    try {
-      while (this.pendingHttpDrive) {
-        const payload = this.pendingHttpDrive;
-        this.pendingHttpDrive = null;
-        try {
-          await this.post('/api/drive', { x: String(payload.x), y: String(payload.y) });
-        } catch {
-          // Firmware timeout is the final stop guard.
-        }
-      }
-    } finally {
-      this.httpDrivePumpRunning = false;
-      if (this.pendingHttpDrive) void this.pumpHttpDrive();
-    }
-  }
-
-  private queueHttpPitch(delta: number) {
-    this.pendingHttpPitch = delta;
-    if (!this.httpPitchPumpRunning) void this.pumpHttpPitch();
-  }
-
-  private async pumpHttpPitch() {
-    this.httpPitchPumpRunning = true;
-    try {
-      while (this.pendingHttpPitch !== null) {
-        const delta = this.pendingHttpPitch;
-        this.pendingHttpPitch = null;
-        if (delta === 0) continue;
-        try {
-          await this.post('/api/camera/pitch', { delta: String(delta) });
-        } catch {
-          // Drop stale incremental gimbal commands.
-        }
-      }
-    } finally {
-      this.httpPitchPumpRunning = false;
-      if (this.pendingHttpPitch !== null) void this.pumpHttpPitch();
-    }
-  }
-
-  private queueHttpLegHeight(direction: number) {
-    this.pendingHttpLegHeight = direction;
-    if (!this.httpLegHeightPumpRunning) void this.pumpHttpLegHeight();
-  }
-
-  private async pumpHttpLegHeight() {
-    this.httpLegHeightPumpRunning = true;
-    try {
-      while (this.pendingHttpLegHeight !== null) {
-        const direction = this.pendingHttpLegHeight;
-        this.pendingHttpLegHeight = null;
-        try {
-          await this.post('/api/legs/height', { direction: String(direction) });
-        } catch {
-          // Firmware timeout releases a stale held command.
-        }
-      }
-    } finally {
-      this.httpLegHeightPumpRunning = false;
-      if (this.pendingHttpLegHeight !== null) void this.pumpHttpLegHeight();
-    }
-  }
-
-  private queueHttpLegLean(percent: number) {
-    this.pendingHttpLegLean = percent;
-    if (!this.httpLegLeanPumpRunning) void this.pumpHttpLegLean();
-  }
-
-  private async pumpHttpLegLean() {
-    this.httpLegLeanPumpRunning = true;
-    try {
-      while (this.pendingHttpLegLean !== null) {
-        const percent = this.pendingHttpLegLean;
-        this.pendingHttpLegLean = null;
-        try {
-          await this.post('/api/legs/lean', { percent: String(percent) });
-        } catch {
-          // Firmware timeout returns the body to neutral.
-        }
-      }
-    } finally {
-      this.httpLegLeanPumpRunning = false;
-      if (this.pendingHttpLegLean !== null) void this.pumpHttpLegLean();
-    }
-  }
 
   async saveAllSettings(params: {
     robotName: string;
@@ -494,8 +393,7 @@ export class RobotApi {
       x: Math.round(curveAxis(x) * 72 * speedScale),
       y: Math.round(curveAxis(y) * 100 * speedScale),
     };
-    if (this.sendSocketNow({ type: 'drive', ...payload })) return;
-    this.queueHttpDrive(payload);
+    this.sendSocketNow({ type: 'drive', ...payload });
   }
 
   sendTrackDistanceAdjust(value: number) {
@@ -514,37 +412,25 @@ export class RobotApi {
     const speedScale = Math.max(15, Math.min(120, speed)) / 100;
     const yaw = Math.round(curveAxis(x) * 72 * speedScale);
     const pitchDelta = Math.round(curveAxis(y) * 4 * speedScale);
-    if (this.sendSocketNow({ type: 'gimbal', yaw, pitchDelta })) return;
-    this.queueHttpDrive({ x: yaw, y: 0 });
-    this.queueHttpPitch(pitchDelta);
+    this.sendSocketNow({ type: 'gimbal', yaw, pitchDelta });
   }
 
   sendLegHeight(direction: number) {
     const value = Math.max(-1, Math.min(1, Math.round(direction)));
-    if (!this.sendSocketNow({ type: 'leg_height', direction: value })) {
-      this.queueHttpLegHeight(value);
-    }
+    this.sendSocketNow({ type: 'leg_height', direction: value });
   }
 
   sendLegHeightValue(percent: number) {
     const value = Math.max(0, Math.min(100, Math.round(percent)));
-    if (!this.sendSocketNow({ type: 'leg_height_value', percent: value })) {
-      void this.post('/api/legs/height_value', { percent: String(value) });
-    }
+    this.sendSocketNow({ type: 'leg_height_value', percent: value });
   }
 
   sendLegLean(percent: number, source = 'ui') {
     const value = Math.max(-100, Math.min(100, Math.round(percent)));
-    if (!this.sendSocketNow({ type: 'leg_lean', percent: value, source })) {
-      this.queueHttpLegLean(value);
-    }
+    this.sendSocketNow({ type: 'leg_lean', percent: value, source });
   }
 
   emergencyStop() {
-    this.pendingHttpPitch = 0;
-    this.pendingHttpDrive = { x: 0, y: 0 };
-    this.pendingHttpLegHeight = 0;
-    this.pendingHttpLegLean = 0;
     this.sendSocketNow({ type: 'drive', x: 0, y: 0 });
     this.sendSocketNow({ type: 'leg_height', direction: 0 });
     this.sendSocketNow({ type: 'leg_lean', percent: 0, source: 'emergency_stop' });
@@ -560,9 +446,6 @@ export class RobotApi {
       void fetch(legHeightUrl, { method: 'POST', keepalive: true });
       void fetch(legLeanUrl, { method: 'POST', keepalive: true });
     }
-    if (!this.httpDrivePumpRunning) void this.pumpHttpDrive();
-    if (!this.httpLegHeightPumpRunning) void this.pumpHttpLegHeight();
-    if (!this.httpLegLeanPumpRunning) void this.pumpHttpLegLean();
   }
 
   async sendTrackSelection(

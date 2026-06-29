@@ -322,6 +322,8 @@ export default function App() {
   const [diagnosticsText, setDiagnosticsText] = useState('');
   const [diagnosticsCopyStatus, setDiagnosticsCopyStatus] = useState('');
   const [driveControlActive, setDriveControlActive] = useState(false);
+  const driveControlActiveRef = useRef(false);
+  const otaLockedRef = useRef(false);
   const pollTimer = useRef<number | null>(null);
   const refreshSequence = useRef(0);
   const actionInFlight = useRef(false);
@@ -613,6 +615,14 @@ export default function App() {
   }, [telemetry.cameraResolution, telemetry.cameraState]);
 
   useEffect(() => {
+    driveControlActiveRef.current = driveControlActive;
+  }, [driveControlActive]);
+
+  useEffect(() => {
+    otaLockedRef.current = otaLocked;
+  }, [otaLocked]);
+
+  useEffect(() => {
     if (legHeightDraft === null) return;
     const timer = window.setTimeout(() => setLegHeightDraft(null), 900);
     return () => window.clearTimeout(timer);
@@ -632,7 +642,7 @@ export default function App() {
     let stopped = false;
 
     const poll = async () => {
-      if (!driveControlActive && !otaLocked) await refresh(controller.signal);
+      if (!driveControlActiveRef.current && !otaLockedRef.current) await refresh(controller.signal);
       if (!stopped) pollTimer.current = window.setTimeout(poll, 1000);
     };
     void poll();
@@ -652,7 +662,7 @@ export default function App() {
     };
     // Initialization intentionally reruns only when the target host or transport changes.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [host, transport, driveControlActive, otaLocked]);
+  }, [host, transport]);
 
   return (
     <ThemeProvider theme={theme}>
