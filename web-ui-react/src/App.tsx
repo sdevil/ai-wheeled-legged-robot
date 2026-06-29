@@ -38,7 +38,7 @@ import {
   ThemeProvider,
   Typography,
 } from '@mui/material';
-import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { useEffect, useMemo, useRef, useState, type PointerEvent, type ReactNode } from 'react';
 
 import { VirtualJoystick } from './components/VirtualJoystick';
 import { RobotApi } from './services/robotApi';
@@ -2008,42 +2008,54 @@ function LeanSlider({
     valueRef.current = value;
   }, [value]);
 
-  useEffect(() => () => {
+  const stopHeartbeat = () => {
     if (heartbeatRef.current !== null) {
       window.clearInterval(heartbeatRef.current);
+      heartbeatRef.current = null;
     }
-  }, []);
-
-  const startHeartbeat = () => {
-    activeRef.current = true;
-    if (heartbeatRef.current !== null) return;
-    heartbeatRef.current = window.setInterval(() => {
-      if (activeRef.current) {
-        onChange(valueRef.current);
-      }
-    }, 120);
   };
 
   const release = () => {
     if (!activeRef.current) return;
     activeRef.current = false;
-    if (heartbeatRef.current !== null) {
-      window.clearInterval(heartbeatRef.current);
-      heartbeatRef.current = null;
-    }
+    stopHeartbeat();
     onRelease();
   };
 
+  useEffect(() => {
+    window.addEventListener('pointerup', release);
+    window.addEventListener('pointercancel', release);
+    window.addEventListener('blur', release);
+    return () => {
+      window.removeEventListener('pointerup', release);
+      window.removeEventListener('pointercancel', release);
+      window.removeEventListener('blur', release);
+      stopHeartbeat();
+    };
+  }, []);
+
+  const startHeartbeat = (nextValue?: number) => {
+    activeRef.current = true;
+    if (typeof nextValue === 'number') {
+      valueRef.current = nextValue;
+      onChange(nextValue);
+    }
+    if (heartbeatRef.current !== null) return;
+    heartbeatRef.current = window.setInterval(() => {
+      if (activeRef.current) {
+        onChange(valueRef.current);
+      }
+    }, 80);
+  };
+
+  const handleHoldButton = (nextValue: number) => (event: PointerEvent) => {
+    event.preventDefault();
+    event.stopPropagation();
+    startHeartbeat(nextValue);
+  };
+
   return (
-    <Box
-      sx={{ mt: 0.8, px: 0.55 }}
-      onPointerDown={startHeartbeat}
-      onPointerUp={release}
-      onPointerCancel={release}
-      onLostPointerCapture={release}
-      onTouchEnd={release}
-      onMouseUp={release}
-    >
+    <Box sx={{ mt: 0.8, px: 0.55, touchAction: 'none' }}>
       <Stack direction="row" sx={{ alignItems: 'center', justifyContent: 'space-between' }}>
         <Typography sx={{ color: 'text.secondary', fontSize: 10 }}>
           {label}
@@ -2053,18 +2065,27 @@ function LeanSlider({
         </Typography>
       </Stack>
       <Stack direction="row" spacing={0.6} sx={{ alignItems: 'center' }}>
-        <KeyboardArrowLeft sx={{ color: '#79a9ff', fontSize: 18 }} />
+        <IconButton
+          size="small"
+          aria-label="Lean left"
+          onPointerDown={handleHoldButton(-100)}
+          sx={{ width: 22, height: 22, color: '#79a9ff' }}
+        >
+          <KeyboardArrowLeft sx={{ fontSize: 18 }} />
+        </IconButton>
         <Slider
           value={value}
           min={-100}
           max={100}
           step={1}
           marks={[{ value: 0 }]}
+          onPointerDown={() => startHeartbeat()}
           onChange={(_, next) => {
             const nextValue = Array.isArray(next) ? next[0] : next;
             valueRef.current = nextValue;
             onChange(nextValue);
           }}
+          onChangeCommitted={release}
           aria-label={label}
           sx={{
             flex: 1,
@@ -2082,7 +2103,14 @@ function LeanSlider({
             },
           }}
         />
-        <KeyboardArrowRight sx={{ color: '#79a9ff', fontSize: 18 }} />
+        <IconButton
+          size="small"
+          aria-label="Lean right"
+          onPointerDown={handleHoldButton(100)}
+          sx={{ width: 22, height: 22, color: '#79a9ff' }}
+        >
+          <KeyboardArrowRight sx={{ fontSize: 18 }} />
+        </IconButton>
       </Stack>
     </Box>
   );
