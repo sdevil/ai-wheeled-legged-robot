@@ -65,8 +65,8 @@ constexpr char PREF_UI_LANGUAGE[] = "ui_language";
 constexpr char DEFAULT_UI_LANGUAGE[] = "en";
 constexpr char DEFAULT_ROBOT_NAME[] = "WRobot-sdevil";
 constexpr char DEFAULT_CAMERA_RESOLUTION[] = "640x480";
-constexpr char ROBOT_FIRMWARE_VERSION[] = "3.2.134";
-constexpr char ROBOT_FIRMWARE_BUILD[] = "2026-06-30-guard-motion-fix-01";
+constexpr char ROBOT_FIRMWARE_VERSION[] = "3.2.135";
+constexpr char ROBOT_FIRMWARE_BUILD[] = "2026-06-30-camera-version-once-01";
 constexpr unsigned long CAMERA_STATUS_STALE_MS = 5000;
 constexpr char CONTROL_MODE_WIFI[] = "wifi";
 constexpr char CONTROL_MODE_GAMEPAD[] = "gamepad";
@@ -358,8 +358,7 @@ void handleDiagnostics() {
       cameraVersionSeenMs == 0 ? 0 : nowMs - cameraVersionSeenMs;
   const bool cameraStatusStale =
       cameraLastSeenMs == 0 || cameraStatusAgeMs > CAMERA_STATUS_STALE_MS;
-  const bool cameraVersionStale =
-      cameraVersionSeenMs == 0 || cameraVersionAgeMs > CAMERA_STATUS_STALE_MS;
+  const bool cameraVersionStale = cameraVersionSeenMs == 0;
   const unsigned long cameraTxAgeMs =
       cameraProtocolLastTxMs() == 0 ? 0 : nowMs - cameraProtocolLastTxMs();
   const unsigned long cameraStatusRxAgeMs =
@@ -753,8 +752,7 @@ void sendJsonStatus() {
       cameraLastSeenMs == 0 ? 0 : millis() - cameraLastSeenMs;
   const unsigned long cameraVersionAgeMs =
       cameraVersionSeenMs == 0 ? 0 : millis() - cameraVersionSeenMs;
-  const bool cameraVersionStale =
-      cameraVersionSeenMs == 0 || cameraVersionAgeMs > CAMERA_STATUS_STALE_MS;
+  const bool cameraVersionStale = cameraVersionSeenMs == 0;
 
   String json = "{\"boot_id\":" + String(statusBootId) +
                 ",\"firmware_version\":\"" + String(ROBOT_FIRMWARE_VERSION) + "\"" +
