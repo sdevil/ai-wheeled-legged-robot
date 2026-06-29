@@ -51,6 +51,10 @@ constexpr float kSearchChassisYaw = 0.025f;
 constexpr uint32_t kStandNudgeStableMs = 250;
 constexpr uint32_t kStandNudgeDurationMs = 0;
 constexpr float kStandNudgeAxis = 0.0f;
+constexpr int kGuardLowestTriggerDeg = 170;
+constexpr int kGuardClearanceLegPercent = 55;
+constexpr int kGuardClearanceLegReadyPercent = 54;
+constexpr uint32_t kGuardClearanceHoldMs = 450;
 
 struct TrackingTuning {
   float yawScale;
@@ -148,6 +152,7 @@ void MotionCoreAdapter::update() {
   if (!started_) return;
   const uint32_t now = millis();
   if (pulseButtons_ && deadlineReached(now, pulseUntilMs_)) pulseButtons_ = 0;
+  updateGuardClearance(now);
   updateLegHeightTarget(now);
   updateStandNudge(now);
 
@@ -160,6 +165,7 @@ void MotionCoreAdapter::command(const MotionCommand& command) {
     case MotionCommandType::Stand:
       maintenance_ = false;
       legHeightTargetActive_ = false;
+      guardClearanceActive_ = false;
       ctrl.symmetric_leg_motion = 0;
       heldPostureButtons_ = 0;
       ctrl.roll_adjust_target = 0.0f;
@@ -173,6 +179,7 @@ void MotionCoreAdapter::command(const MotionCommand& command) {
     case MotionCommandType::Sit:
       tracking_ = false;
       legHeightTargetActive_ = false;
+      guardClearanceActive_ = false;
       ctrl.symmetric_leg_motion = 0;
       standNudgePending_ = false;
       standNudgeBalanceSinceMs_ = 0;
@@ -219,6 +226,7 @@ void MotionCoreAdapter::command(const MotionCommand& command) {
     case MotionCommandType::TrackStart:
       tracking_ = true;
       legHeightTargetActive_ = false;
+      guardClearanceActive_ = false;
       ctrl.symmetric_leg_motion = 0;
       standNudgePending_ = false;
       standNudgeBalanceSinceMs_ = 0;
@@ -285,6 +293,7 @@ void MotionCoreAdapter::command(const MotionCommand& command) {
       }
       break;
     case MotionCommandType::LegHeight:
+      guardClearanceActive_ = false;
       if (command.y == 0) {
         heldPostureButtons_ = 0;
         ctrl.symmetric_leg_motion = 0;
@@ -296,11 +305,8 @@ void MotionCoreAdapter::command(const MotionCommand& command) {
       break;
     case MotionCommandType::LegHeightPercent:
       if (!maintenance_) {
-        heldPostureButtons_ = 0;
-        legHeightBaseTarget_ = legHeightBaseFromPercent(command.y);
-        legHeightTargetActive_ = true;
-        ctrl.symmetric_leg_motion = 1;
-        lastLegHeightUpdateMs_ = millis();
+        guardClearanceActive_ = false;
+        setLegHeightTargetPercent(command.y);
       }
       break;
     case MotionCommandType::GuardServo:
@@ -470,8 +476,58 @@ void MotionCoreAdapter::updateLegHeightTarget(uint32_t now) {
   }
 }
 
+void MotionCoreAdapter::setLegHeightTargetPercent(int percent) {
+  heldPostureButtons_ = 0;
+  legHeightBaseTarget_ = legHeightBaseFromPercent(percent);
+  legHeightTargetActive_ = true;
+  ctrl.symmetric_leg_motion = 1;
+  lastLegHeightUpdateMs_ = millis();
+}
+
+void MotionCoreAdapter::updateGuardClearance(uint32_t now) {
+  if (!guardClearanceActive_) return;
+  if (maintenance_ || ctrl.fsm_state_machine.mode != fsm::mode_state::BALANCE) {
+    guardClearanceActive_ = false;
+    return;
+  }
+
+  if (guardClearancePhase_ == 1) {
+    if (legHeightPercent() >= kGuardClearanceLegReadyPercent) {
+      guardServoAngleDeg_ = constrain(guardClearancePendingAngleDeg_, 0, 180);
+      frontier_servo.set_angle((uint16_t)guardServoAngleDeg_);
+      guardClearancePhase_ = 2;
+      guardClearancePhaseStartedMs_ = now;
+    }
+  } else if (guardClearancePhase_ == 2) {
+    if (now - guardClearancePhaseStartedMs_ >= kGuardClearanceHoldMs) {
+      setLegHeightTargetPercent(guardClearanceSavedLegHeightPercent_);
+      guardClearanceActive_ = false;
+      guardClearancePhase_ = 0;
+    }
+  } else {
+    guardClearanceActive_ = false;
+  }
+}
+
 void MotionCoreAdapter::setGuardServoAngle(int angleDeg) {
-  guardServoAngleDeg_ = constrain(angleDeg, 0, 180);
+  const int requestedAngle = constrain(angleDeg, 0, 180);
+  const bool requiresClearance =
+      requestedAngle >= kGuardLowestTriggerDeg &&
+      legHeightPercent() < kGuardClearanceLegPercent &&
+      ctrl.fsm_state_machine.mode == fsm::mode_state::BALANCE &&
+      !maintenance_;
+  if (requiresClearance) {
+    guardClearanceActive_ = true;
+    guardClearancePhase_ = 1;
+    guardClearanceSavedLegHeightPercent_ = legHeightPercent();
+    guardClearancePendingAngleDeg_ = requestedAngle;
+    guardClearancePhaseStartedMs_ = millis();
+    setLegHeightTargetPercent(kGuardClearanceLegPercent);
+    return;
+  }
+
+  guardClearanceActive_ = false;
+  guardServoAngleDeg_ = requestedAngle;
   frontier_servo.set_angle((uint16_t)guardServoAngleDeg_);
 }
 
