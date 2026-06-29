@@ -38,7 +38,7 @@ import {
   ThemeProvider,
   Typography,
 } from '@mui/material';
-import { useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent, type ReactNode } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent, type ReactNode } from 'react';
 
 import { VirtualJoystick } from './components/VirtualJoystick';
 import { RobotApi } from './services/robotApi';
@@ -723,11 +723,11 @@ export default function App() {
                       value={legLeanDraft}
                       onChange={(value) => {
                         setLegLeanDraft(value);
-                        api.sendLegLean(value);
+                        api.sendLegLean(value, 'slider_change');
                       }}
                       onRelease={() => {
                         setLegLeanDraft(0);
-                        api.sendLegLean(0);
+                        api.sendLegLean(0, 'slider_release');
                       }}
                     />
                   }
@@ -2004,6 +2004,7 @@ function LeanSlider({
   const valueRef = useRef(value);
   const heartbeatRef = useRef<number | null>(null);
   const trackRef = useRef<HTMLDivElement | null>(null);
+  const activePointerIdRef = useRef<number | null>(null);
 
   useEffect(() => {
     valueRef.current = value;
@@ -2016,14 +2017,25 @@ function LeanSlider({
     }
   };
 
-  const release = () => {
+  const release = useCallback(() => {
     if (!activeRef.current) return;
     activeRef.current = false;
+    activePointerIdRef.current = null;
     stopHeartbeat();
     onRelease();
-  };
+  }, [onRelease]);
 
-  useEffect(() => () => stopHeartbeat(), []);
+  useEffect(() => {
+    window.addEventListener('pointerup', release);
+    window.addEventListener('mouseup', release);
+    window.addEventListener('touchend', release);
+    return () => {
+      window.removeEventListener('pointerup', release);
+      window.removeEventListener('mouseup', release);
+      window.removeEventListener('touchend', release);
+      stopHeartbeat();
+    };
+  }, [release]);
 
   const updateFromPointer = (clientX: number) => {
     const track = trackRef.current;
@@ -2048,18 +2060,22 @@ function LeanSlider({
     event.preventDefault();
     event.stopPropagation();
     event.currentTarget.setPointerCapture?.(event.pointerId);
+    activePointerIdRef.current = event.pointerId;
     startHeartbeat();
     updateFromPointer(event.clientX);
   };
 
   const handlePointerMove = (event: ReactPointerEvent<HTMLDivElement>) => {
     if (!activeRef.current) return;
+    if (activePointerIdRef.current !== null &&
+        event.pointerId !== activePointerIdRef.current) return;
     event.preventDefault();
     updateFromPointer(event.clientX);
   };
 
   const handlePointerEnd = (event: ReactPointerEvent<HTMLDivElement>) => {
     event.preventDefault();
+    event.stopPropagation();
     release();
   };
 
@@ -2090,7 +2106,10 @@ function LeanSlider({
           onPointerDown={handlePointerDown}
           onPointerMove={handlePointerMove}
           onPointerUp={handlePointerEnd}
-          onPointerCancel={handlePointerEnd}
+          onPointerCancel={(event) => {
+            event.preventDefault();
+            event.stopPropagation();
+          }}
           sx={{
             position: 'relative',
             flex: 1,

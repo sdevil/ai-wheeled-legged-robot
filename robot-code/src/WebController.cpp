@@ -65,7 +65,7 @@ constexpr char PREF_UI_LANGUAGE[] = "ui_language";
 constexpr char DEFAULT_UI_LANGUAGE[] = "en";
 constexpr char DEFAULT_ROBOT_NAME[] = "WRobot-sdevil";
 constexpr char DEFAULT_CAMERA_RESOLUTION[] = "640x480";
-constexpr char ROBOT_FIRMWARE_VERSION[] = "3.2.118";
+constexpr char ROBOT_FIRMWARE_VERSION[] = "3.2.119";
 constexpr char ROBOT_FIRMWARE_BUILD[] = "2026-06-29-public-release-cleanup-01";
 constexpr unsigned long CAMERA_STATUS_STALE_MS = 5000;
 constexpr char CONTROL_MODE_WIFI[] = "wifi";
@@ -93,7 +93,7 @@ int pendingCameraPitchDelta = 0;
 int pendingLegHeightDirection = 99;
 int pendingLegHeightPercent = -1;
 int pendingLegLeanPercent = 999;
-const char* pendingLegLeanSource = "boot";
+char pendingLegLeanSource[32] = "boot";
 unsigned long lastDriveCommandMs = 0;
 uint32_t driveCommandCount = 0;
 uint32_t driveCommandMaxGapMs = 0;
@@ -299,7 +299,7 @@ void handleDiagnostics() {
   uint32_t currentDriveCommandCount;
   uint32_t currentDriveMaxGapMs;
   int currentPendingLegLean;
-  const char* currentPendingLegLeanSource;
+  char currentPendingLegLeanSource[32];
   uint32_t currentWebsocketCloseCount;
 
   lockStatus();
@@ -324,7 +324,9 @@ void handleDiagnostics() {
   currentDriveCommandCount = driveCommandCount;
   currentDriveMaxGapMs = driveCommandMaxGapMs;
   currentPendingLegLean = pendingLegLeanPercent;
-  currentPendingLegLeanSource = pendingLegLeanSource;
+  strncpy(currentPendingLegLeanSource, pendingLegLeanSource,
+          sizeof(currentPendingLegLeanSource) - 1);
+  currentPendingLegLeanSource[sizeof(currentPendingLegLeanSource) - 1] = '\0';
   currentWebsocketCloseCount = websocketCloseCount;
   portEXIT_CRITICAL(&stateMux);
 
@@ -1061,7 +1063,9 @@ bool setLegLeanCommand(int percent, const char* source) {
   percent = constrain(percent, -100, 100);
   portENTER_CRITICAL(&stateMux);
   pendingLegLeanPercent = percent;
-  pendingLegLeanSource = source == nullptr ? "unknown" : source;
+  strncpy(pendingLegLeanSource, source == nullptr ? "unknown" : source,
+          sizeof(pendingLegLeanSource) - 1);
+  pendingLegLeanSource[sizeof(pendingLegLeanSource) - 1] = '\0';
   lastLegLeanCommandMs = 0;
   portEXIT_CRITICAL(&stateMux);
   return true;
@@ -1238,8 +1242,16 @@ void handleWebSocketMessage(const String& message) {
 
   if (type == "leg_lean") {
     int percent = 0;
+    String source = "ws";
+    String messageSource;
+    if (jsonStringValue(message, "source", messageSource) &&
+        messageSource.length() > 0) {
+      messageSource.replace("\"", "");
+      messageSource.replace("\\", "");
+      source = "ws:" + messageSource.substring(0, 24);
+    }
     const bool accepted = jsonIntValue(message, "percent", percent) &&
-                          setLegLeanCommand(percent, "ws:leg_lean");
+                          setLegLeanCommand(percent, source.c_str());
     sendWebSocketAck("leg_lean", requestId, accepted);
     return;
   }

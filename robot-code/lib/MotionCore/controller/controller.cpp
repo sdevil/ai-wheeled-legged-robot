@@ -628,15 +628,24 @@ void controller::leg_loop()
         leg_position_add = constrain(leg_position_add, -70.0f, 70.0f);
     }
 
-    const float lean_span = kLegHeightBaseMax - kLegHeightBaseMin;
-    const float left_leg_height_base = constrain(
-        leg_height_base - leg_lean * lean_span,
-        kLegHeightBaseMin,
-        kLegHeightBaseMax);
-    const float right_leg_height_base = constrain(
-        leg_height_base + leg_lean * lean_span,
-        kLegHeightBaseMin,
-        kLegHeightBaseMax);
+    const float lean_amount = constrain(leg_lean, -1.0f, 1.0f);
+    const float lean_left_span = leg_height_base - kLegHeightBaseMin;
+    const float lean_right_span = kLegHeightBaseMax - leg_height_base;
+    float left_leg_height_base = leg_height_base;
+    float right_leg_height_base = leg_height_base;
+    if(lean_amount > 0.0f)
+    {
+        left_leg_height_base -= lean_amount * lean_left_span;
+        right_leg_height_base += lean_amount * lean_right_span;
+    }
+    else if(lean_amount < 0.0f)
+    {
+        const float magnitude = -lean_amount;
+        left_leg_height_base += magnitude * lean_right_span;
+        right_leg_height_base -= magnitude * lean_left_span;
+    }
+    left_leg_height_base = constrain(left_leg_height_base, kLegHeightBaseMin, kLegHeightBaseMax);
+    right_leg_height_base = constrain(right_leg_height_base, kLegHeightBaseMin, kLegHeightBaseMax);
 
     int16_t left_position = (int16_t)(2048.0f + 8.4f * (30.0f - left_leg_height_base) - leg_position_add);
     int16_t right_position = (int16_t)(2048.0f - 8.4f * (30.0f - right_leg_height_base) - leg_position_add);

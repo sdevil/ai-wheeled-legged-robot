@@ -533,9 +533,9 @@ export class RobotApi {
     }
   }
 
-  sendLegLean(percent: number) {
+  sendLegLean(percent: number, source = 'ui') {
     const value = Math.max(-100, Math.min(100, Math.round(percent)));
-    if (!this.sendSocketNow({ type: 'leg_lean', percent: value })) {
+    if (!this.sendSocketNow({ type: 'leg_lean', percent: value, source })) {
       this.queueHttpLegLean(value);
     }
   }
@@ -547,7 +547,7 @@ export class RobotApi {
     this.pendingHttpLegLean = 0;
     this.sendSocketNow({ type: 'drive', x: 0, y: 0 });
     this.sendSocketNow({ type: 'leg_height', direction: 0 });
-    this.sendSocketNow({ type: 'leg_lean', percent: 0 });
+    this.sendSocketNow({ type: 'leg_lean', percent: 0, source: 'emergency_stop' });
     const url = `${this.getBaseHttp()}/api/drive?x=0&y=0`;
     const legHeightUrl = `${this.getBaseHttp()}/api/legs/height?direction=0`;
     const legLeanUrl = `${this.getBaseHttp()}/api/legs/lean?percent=0`;
