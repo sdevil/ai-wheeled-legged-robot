@@ -2036,6 +2036,9 @@ function LeanSlider({
     activeRef.current = false;
     activePointerIdRef.current = null;
     stopHeartbeat();
+    valueRef.current = 0;
+    setDisplayValue(0);
+    onChangeRef.current(0);
   }, []);
 
   useEffect(() => {
