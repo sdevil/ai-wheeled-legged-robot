@@ -2045,20 +2045,9 @@ function LeanSlider({
     activePointerIdRef.current = null;
     stopHeartbeat();
     stopSpring();
-
-    springRef.current = window.setInterval(() => {
-      const current = valueRef.current;
-      if (current === 0) {
-        stopSpring();
-        return;
-      }
-      const magnitude = Math.max(0, Math.abs(current) - 12);
-      const nextValue = magnitude === 0 ? 0 : Math.sign(current) * magnitude;
-      valueRef.current = nextValue;
-      setDisplayValue(nextValue);
-      onChangeRef.current(nextValue);
-      if (nextValue === 0) stopSpring();
-    }, 35);
+    valueRef.current = 0;
+    setDisplayValue(0);
+    onChangeRef.current(0);
   }, []);
 
   useEffect(() => {
