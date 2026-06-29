@@ -38,7 +38,7 @@ import {
   ThemeProvider,
   Typography,
 } from '@mui/material';
-import { useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent, type ReactNode, type TouchEvent as ReactTouchEvent } from 'react';
+import { useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent, type ReactNode } from 'react';
 
 import { VirtualJoystick } from './components/VirtualJoystick';
 import { RobotApi } from './services/robotApi';
@@ -2003,59 +2003,69 @@ function LeanSlider({
   const activeRef = useRef(false);
   const valueRef = useRef(value);
   const heartbeatRef = useRef<number | null>(null);
+  const trackRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
     valueRef.current = value;
   }, [value]);
 
-  const release = () => {
-    if (!activeRef.current) return;
-    activeRef.current = false;
+  const stopHeartbeat = () => {
     if (heartbeatRef.current !== null) {
       window.clearInterval(heartbeatRef.current);
       heartbeatRef.current = null;
     }
+  };
+
+  const release = () => {
+    if (!activeRef.current) return;
+    activeRef.current = false;
+    stopHeartbeat();
     onRelease();
   };
 
-  useEffect(() => {
-    document.addEventListener('pointerup', release);
-    document.addEventListener('pointercancel', release);
-    document.addEventListener('mouseup', release);
-    document.addEventListener('touchend', release);
-    document.addEventListener('touchcancel', release);
-    window.addEventListener('blur', release);
-    return () => {
-      document.removeEventListener('pointerup', release);
-      document.removeEventListener('pointercancel', release);
-      document.removeEventListener('mouseup', release);
-      document.removeEventListener('touchend', release);
-      document.removeEventListener('touchcancel', release);
-      window.removeEventListener('blur', release);
-      if (heartbeatRef.current !== null) {
-        window.clearInterval(heartbeatRef.current);
-      }
-    };
-  }, []);
+  useEffect(() => () => stopHeartbeat(), []);
+
+  const updateFromPointer = (clientX: number) => {
+    const track = trackRef.current;
+    if (!track) return;
+    const rect = track.getBoundingClientRect();
+    if (rect.width <= 0) return;
+    const ratio = Math.max(0, Math.min(1, (clientX - rect.left) / rect.width));
+    const nextValue = Math.round(ratio * 200 - 100);
+    valueRef.current = nextValue;
+    onChange(nextValue);
+  };
 
   const startHeartbeat = () => {
     activeRef.current = true;
     if (heartbeatRef.current !== null) return;
     heartbeatRef.current = window.setInterval(() => {
-      if (activeRef.current) {
-        onChange(valueRef.current);
-      }
+      if (activeRef.current) onChange(valueRef.current);
     }, 80);
   };
 
-  const handlePointerStart = (event: ReactPointerEvent) => {
-    startHeartbeat();
+  const handlePointerDown = (event: ReactPointerEvent<HTMLDivElement>) => {
+    event.preventDefault();
+    event.stopPropagation();
     event.currentTarget.setPointerCapture?.(event.pointerId);
+    startHeartbeat();
+    updateFromPointer(event.clientX);
   };
 
-  const handleTouchStart = (_event: ReactTouchEvent) => {
-    startHeartbeat();
+  const handlePointerMove = (event: ReactPointerEvent<HTMLDivElement>) => {
+    if (!activeRef.current) return;
+    event.preventDefault();
+    updateFromPointer(event.clientX);
   };
+
+  const handlePointerEnd = (event: ReactPointerEvent<HTMLDivElement>) => {
+    event.preventDefault();
+    release();
+  };
+
+  const thumbLeft = `${(value + 100) / 2}%`;
+  const fillLeft = value < 0 ? thumbLeft : '50%';
+  const fillWidth = `${Math.abs(value) / 2}%`;
 
   return (
     <Box sx={{ mt: 0.8, px: 0.55, touchAction: 'none', userSelect: 'none' }}>
@@ -2069,38 +2079,76 @@ function LeanSlider({
       </Stack>
       <Stack direction="row" spacing={0.6} sx={{ alignItems: 'center' }}>
         <KeyboardArrowLeft sx={{ color: '#79a9ff', fontSize: 18 }} />
-        <Slider
-          value={value}
-          min={-100}
-          max={100}
-          step={1}
-          marks={[{ value: 0 }]}
-          onPointerDownCapture={handlePointerStart}
-          onTouchStartCapture={handleTouchStart}
-          onMouseDownCapture={startHeartbeat}
-          onChange={(_, next) => {
-            const nextValue = Array.isArray(next) ? next[0] : next;
-            valueRef.current = nextValue;
-            activeRef.current = true;
-            onChange(nextValue);
-          }}
+        <Box
+          ref={trackRef}
+          role="slider"
           aria-label={label}
+          aria-valuemin={-100}
+          aria-valuemax={100}
+          aria-valuenow={value}
+          tabIndex={0}
+          onPointerDown={handlePointerDown}
+          onPointerMove={handlePointerMove}
+          onPointerUp={handlePointerEnd}
+          onPointerCancel={handlePointerEnd}
           sx={{
+            position: 'relative',
             flex: 1,
-            '& .MuiSlider-thumb': {
-              width: 18,
-              height: 18,
-              boxShadow: '0 0 18px rgba(72,137,255,.7)',
-            },
-            '& .MuiSlider-track': { height: 6 },
-            '& .MuiSlider-rail': { height: 6, opacity: 0.28 },
-            '& .MuiSlider-mark': {
+            height: 28,
+            cursor: 'pointer',
+            touchAction: 'none',
+          }}
+        >
+          <Box
+            sx={{
+              position: 'absolute',
+              left: 0,
+              right: 0,
+              top: '50%',
+              height: 6,
+              transform: 'translateY(-50%)',
+              borderRadius: 99,
+              bgcolor: 'rgba(121,169,255,.22)',
+            }}
+          />
+          <Box
+            sx={{
+              position: 'absolute',
+              left: '50%',
+              top: '50%',
               width: 2,
               height: 12,
+              transform: 'translate(-50%, -50%)',
+              borderRadius: 99,
               bgcolor: 'rgba(255,255,255,.55)',
-            },
-          }}
-        />
+            }}
+          />
+          <Box
+            sx={{
+              position: 'absolute',
+              left: fillLeft,
+              top: '50%',
+              width: fillWidth,
+              height: 6,
+              transform: 'translateY(-50%)',
+              borderRadius: 99,
+              bgcolor: '#398cff',
+            }}
+          />
+          <Box
+            sx={{
+              position: 'absolute',
+              left: thumbLeft,
+              top: '50%',
+              width: 18,
+              height: 18,
+              transform: 'translate(-50%, -50%)',
+              borderRadius: '50%',
+              bgcolor: '#3f95ff',
+              boxShadow: '0 0 18px rgba(72,137,255,.7)',
+            }}
+          />
+        </Box>
         <KeyboardArrowRight sx={{ color: '#79a9ff', fontSize: 18 }} />
       </Stack>
     </Box>
@@ -2135,6 +2183,7 @@ const miniRoundButtonSx = {
   bgcolor: '#0f1320',
   border: '1px solid #263041',
 };
+
 
 
 
