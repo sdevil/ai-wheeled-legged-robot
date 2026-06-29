@@ -52,6 +52,7 @@ constexpr float kLegHeightBaseMin = -4.0f;
 constexpr float kLegHeightBaseMax = 52.0f;
 constexpr float kLegHeightBalanceMin = -1.0f;
 constexpr float kLegHeightBalanceMax = 49.0f;
+constexpr float kLegLeanSlewPerLoop = 0.035f;
 
 float smoothstep01(float value)
 {
@@ -606,11 +607,15 @@ void controller::sit_loop(uint32_t tick)
 }
 void controller::leg_loop()
 {
-    if((buttons & BTN_RIGHT) && !(buttons & ~BTN_RIGHT)){roll_adjust += 0.025f;}
-    if((buttons & BTN_LEFT) && !(buttons & ~BTN_LEFT)){roll_adjust -= 0.025f;}
+    if((buttons & BTN_RIGHT) && !(buttons & ~BTN_RIGHT)){leg_lean_target += 0.025f;}
+    if((buttons & BTN_LEFT) && !(buttons & ~BTN_LEFT)){leg_lean_target -= 0.025f;}
     if((buttons & BTN_UP) && !(buttons & ~BTN_UP)){leg_height_base -= 0.025f;}
     if((buttons & BTN_DOWN) && !(buttons & ~BTN_DOWN)){leg_height_base += 0.025f;}
     leg_height_base = constrain(leg_height_base, kLegHeightBalanceMin, kLegHeightBalanceMax);
+    leg_lean_target = constrain(leg_lean_target, -1.0f, 1.0f);
+    leg_lean = leg_lean < leg_lean_target
+        ? min(leg_lean + kLegLeanSlewPerLoop, leg_lean_target)
+        : max(leg_lean - kLegLeanSlewPerLoop, leg_lean_target);
 
     float roll_angle = lpf_roll(mpu6050_dev.angle[0] / (float)PI * 180.0f);
     float leg_position_add = pid_roll_angle(roll_angle - roll_adjust);
@@ -623,8 +628,18 @@ void controller::leg_loop()
         leg_position_add = constrain(leg_position_add, -70.0f, 70.0f);
     }
 
-    int16_t left_position = (int16_t)(2048.0f + 8.4f * (30.0f - leg_height_base) - leg_position_add);
-    int16_t right_position = (int16_t)(2048.0f - 8.4f * (30.0f - leg_height_base) - leg_position_add);
+    const float lean_span = kLegHeightBaseMax - kLegHeightBaseMin;
+    const float left_leg_height_base = constrain(
+        leg_height_base - leg_lean * lean_span,
+        kLegHeightBaseMin,
+        kLegHeightBaseMax);
+    const float right_leg_height_base = constrain(
+        leg_height_base + leg_lean * lean_span,
+        kLegHeightBaseMin,
+        kLegHeightBaseMax);
+
+    int16_t left_position = (int16_t)(2048.0f + 8.4f * (30.0f - left_leg_height_base) - leg_position_add);
+    int16_t right_position = (int16_t)(2048.0f - 8.4f * (30.0f - right_leg_height_base) - leg_position_add);
 
     left_position = constrain(left_position, SERVO_LEFT_MIN, SERVO_LEFT_MAX);
     right_position = constrain(right_position, SERVO_RIGHT_MAX, SERVO_RIGHT_MIN);

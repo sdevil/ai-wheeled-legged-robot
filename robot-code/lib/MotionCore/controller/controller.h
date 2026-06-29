@@ -81,6 +81,8 @@ class controller {
 
         float roll_adjust = 0.0f;
         float roll_adjust_target = 0.0f;
+        float leg_lean = 0.0f;
+        float leg_lean_target = 0.0f;
         float leg_height_base = (float)LEG_HEIGHT_BASE;
         PIDController pid_roll_angle{8.0f, 30.0f, 0.0f, 100000.0f, 450.0f};
         LowPassFilter lpf_roll{0.3f};

@@ -36,7 +36,6 @@ constexpr float kLegHeightBaseMax = 52.0f;
 constexpr float kLegHeightControlMin = -1.0f;
 constexpr float kLegHeightControlMax = 49.0f;
 constexpr float kLegHeightSlewPerSecond = 42.0f;
-constexpr float kLegLeanMaxDeg = 16.0f;
 constexpr uint32_t kTrackSettleMs = 300;
 constexpr uint32_t kTrackBalanceStableMs = 500;
 constexpr uint32_t kTrackCommandTimeoutMs = 2500;
@@ -162,6 +161,7 @@ void MotionCoreAdapter::command(const MotionCommand& command) {
       ctrl.symmetric_leg_motion = 0;
       heldPostureButtons_ = 0;
       ctrl.roll_adjust_target = 0.0f;
+      ctrl.leg_lean_target = 0.0f;
       standNudgePending_ = false;
       standNudgeBalanceSinceMs_ = 0;
       standNudgeUntilMs_ = 0;
@@ -177,6 +177,7 @@ void MotionCoreAdapter::command(const MotionCommand& command) {
       heldPostureButtons_ = 0;
       enterTrackingState(TrackObservationState::Idle);
       ctrl.roll_adjust_target = 0.0f;
+      ctrl.leg_lean_target = 0.0f;
       stopMove();
       pulseButton(BTN_LB, 120);
       break;
@@ -275,9 +276,8 @@ void MotionCoreAdapter::command(const MotionCommand& command) {
       break;
     case MotionCommandType::LegLean:
       if (!maintenance_) {
-        ctrl.roll_adjust_target =
-            constrain((float)command.x * (kLegLeanMaxDeg / 100.0f),
-                      -kLegLeanMaxDeg, kLegLeanMaxDeg);
+        ctrl.leg_lean_target = constrain((float)command.x / 100.0f,
+                                         -1.0f, 1.0f);
       }
       break;
     case MotionCommandType::LegHeight:
@@ -436,7 +436,7 @@ int MotionCoreAdapter::legHeightPercent() const {
 }
 
 int MotionCoreAdapter::legLeanPercent() const {
-  return constrain((int)roundf(ctrl.roll_adjust_target * 10.0f), -100, 100);
+  return constrain((int)roundf(ctrl.leg_lean_target * 100.0f), -100, 100);
 }
 
 void MotionCoreAdapter::updateLegHeightTarget(uint32_t now) {
