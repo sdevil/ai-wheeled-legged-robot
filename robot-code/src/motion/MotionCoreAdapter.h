@@ -25,6 +25,7 @@ class MotionCoreAdapter final : public MotionCore {
   void updateGuardClearance(uint32_t now);
   void updateLegHeightTarget(uint32_t now);
   void setLegHeightTargetPercent(int percent);
+  bool approachGuardClearanceLegHeight(int percent, uint32_t now);
   void setGuardServoAngle(int angleDeg);
   int legHeightPercent() const;
   int legLeanPercent() const;
@@ -92,6 +93,7 @@ class MotionCoreAdapter final : public MotionCore {
   int guardClearanceSavedLegHeightPercent_ = 50;
   int guardClearancePendingAngleDeg_ = 0;
   uint32_t guardClearancePhaseStartedMs_ = 0;
+  uint32_t lastGuardClearanceUpdateMs_ = 0;
 };
 
 MotionCoreAdapter& motionCore();
