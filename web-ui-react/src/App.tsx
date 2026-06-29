@@ -738,10 +738,6 @@ export default function App() {
                         setLegLeanDraft(value);
                         api.sendLegLean(value, 'slider_change');
                       }}
-                      onRelease={() => {
-                        setLegLeanDraft(0);
-                        api.sendLegLean(0, 'slider_release');
-                      }}
                     />
                   }
                 />
@@ -2006,29 +2002,27 @@ function LeanSlider({
   label,
   value,
   onChange,
-  onRelease,
 }: {
   label: string;
   value: number;
   onChange: (value: number) => void;
-  onRelease: () => void;
 }) {
   const activeRef = useRef(false);
   const valueRef = useRef(value);
+  const [displayValue, setDisplayValue] = useState(value);
   const onChangeRef = useRef(onChange);
-  const onReleaseRef = useRef(onRelease);
   const heartbeatRef = useRef<number | null>(null);
   const trackRef = useRef<HTMLDivElement | null>(null);
   const activePointerIdRef = useRef<number | null>(null);
 
   useEffect(() => {
     valueRef.current = value;
+    if (!activeRef.current) setDisplayValue(value);
   }, [value]);
 
   useEffect(() => {
     onChangeRef.current = onChange;
-    onReleaseRef.current = onRelease;
-  }, [onChange, onRelease]);
+  }, [onChange]);
 
   const stopHeartbeat = () => {
     if (heartbeatRef.current !== null) {
@@ -2042,7 +2036,9 @@ function LeanSlider({
     activeRef.current = false;
     activePointerIdRef.current = null;
     stopHeartbeat();
-    onReleaseRef.current();
+    valueRef.current = 0;
+    setDisplayValue(0);
+    onChangeRef.current(0);
   }, []);
 
   useEffect(() => {
@@ -2051,9 +2047,14 @@ function LeanSlider({
           event.pointerId !== activePointerIdRef.current) return;
       release();
     };
+    const handleWindowRelease = () => release();
     window.addEventListener('pointerup', handleWindowPointerUp);
+    window.addEventListener('mouseup', handleWindowRelease);
+    window.addEventListener('touchend', handleWindowRelease);
     return () => {
       window.removeEventListener('pointerup', handleWindowPointerUp);
+      window.removeEventListener('mouseup', handleWindowRelease);
+      window.removeEventListener('touchend', handleWindowRelease);
       stopHeartbeat();
     };
   }, [release]);
@@ -2066,6 +2067,7 @@ function LeanSlider({
     const ratio = Math.max(0, Math.min(1, (clientX - rect.left) / rect.width));
     const nextValue = Math.round(ratio * 200 - 100);
     valueRef.current = nextValue;
+    setDisplayValue(nextValue);
     onChangeRef.current(nextValue);
   };
 
@@ -2095,14 +2097,16 @@ function LeanSlider({
   };
 
   const handlePointerEnd = (event: ReactPointerEvent<HTMLDivElement>) => {
+    if (activePointerIdRef.current !== null &&
+        event.pointerId !== activePointerIdRef.current) return;
     event.preventDefault();
     event.stopPropagation();
     release();
   };
 
-  const thumbLeft = `${(value + 100) / 2}%`;
-  const fillLeft = value < 0 ? thumbLeft : '50%';
-  const fillWidth = `${Math.abs(value) / 2}%`;
+  const thumbLeft = `${(displayValue + 100) / 2}%`;
+  const fillLeft = displayValue < 0 ? thumbLeft : '50%';
+  const fillWidth = `${Math.abs(displayValue) / 2}%`;
 
   return (
     <Box sx={{ mt: 0.8, px: 0.55, touchAction: 'none', userSelect: 'none' }}>
@@ -2111,7 +2115,7 @@ function LeanSlider({
           {label}
         </Typography>
         <Typography sx={{ color: '#80aaff', fontSize: 10, fontWeight: 700 }}>
-          {value > 0 ? `R ${value}%` : value < 0 ? `L ${Math.abs(value)}%` : '0%'}
+          {displayValue > 0 ? `R ${displayValue}%` : displayValue < 0 ? `L ${Math.abs(displayValue)}%` : '0%'}
         </Typography>
       </Stack>
       <Stack direction="row" spacing={0.6} sx={{ alignItems: 'center' }}>
@@ -2122,7 +2126,7 @@ function LeanSlider({
           aria-label={label}
           aria-valuemin={-100}
           aria-valuemax={100}
-          aria-valuenow={value}
+          aria-valuenow={displayValue}
           tabIndex={0}
           onPointerDown={handlePointerDown}
           onPointerMove={handlePointerMove}
