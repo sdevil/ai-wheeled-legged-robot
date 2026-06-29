@@ -2036,13 +2036,14 @@ function LeanSlider({
   }, []);
 
   useEffect(() => {
-    window.addEventListener('pointerup', release);
-    window.addEventListener('mouseup', release);
-    window.addEventListener('touchend', release);
+    const handleWindowPointerUp = (event: PointerEvent) => {
+      if (activePointerIdRef.current !== null &&
+          event.pointerId !== activePointerIdRef.current) return;
+      release();
+    };
+    window.addEventListener('pointerup', handleWindowPointerUp);
     return () => {
-      window.removeEventListener('pointerup', release);
-      window.removeEventListener('mouseup', release);
-      window.removeEventListener('touchend', release);
+      window.removeEventListener('pointerup', handleWindowPointerUp);
       stopHeartbeat();
     };
   }, [release]);

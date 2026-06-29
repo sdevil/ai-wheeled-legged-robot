@@ -280,6 +280,7 @@ void MotionCoreAdapter::command(const MotionCommand& command) {
       if (!maintenance_) {
         ctrl.leg_lean_target = constrain((float)command.x / 100.0f,
                                          -1.0f, 1.0f);
+        if (command.x == 0) ctrl.leg_lean = 0.0f;
       }
       break;
     case MotionCommandType::LegHeight:
