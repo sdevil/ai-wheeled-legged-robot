@@ -37,6 +37,8 @@ constexpr float kLegHeightBaseMax = 52.0f;
 constexpr float kLegHeightControlMin = -1.0f;
 constexpr float kLegHeightControlMax = 49.0f;
 constexpr float kLegHeightSlewPerSecond = 42.0f;
+constexpr int kDefaultLegHeightPercent = 55;
+constexpr int kDefaultGuardAngleDeg = 0;
 constexpr uint32_t kTrackSettleMs = 300;
 constexpr uint32_t kTrackBalanceStableMs = 500;
 constexpr uint32_t kTrackCommandTimeoutMs = 2500;
@@ -132,7 +134,7 @@ void MotionCoreAdapter::begin() {
   if (started_) return;
   started_ = true;
   ctrl.init();
-  setGuardServoAngle(0);
+  setGuardServoAngle(kDefaultGuardAngleDeg);
 
   // WiFi and the web server run on core 0. Keep the full motion pipeline on
   // core 1 so network activity cannot interrupt FOC output. Electrical angle
@@ -168,6 +170,7 @@ void MotionCoreAdapter::command(const MotionCommand& command) {
       standNudgePending_ = false;
       standNudgeBalanceSinceMs_ = 0;
       standNudgeUntilMs_ = 0;
+      setLegHeightTargetPercent(kDefaultLegHeightPercent);
       pulseButton(BTN_RB, 120);
       break;
     case MotionCommandType::Sit:
@@ -186,6 +189,13 @@ void MotionCoreAdapter::command(const MotionCommand& command) {
       pulseButton(BTN_LB, 120);
       break;
     case MotionCommandType::ResetPose:
+      ctrl.roll_adjust_target = 0.0f;
+      ctrl.leg_lean = 0.0f;
+      ctrl.leg_lean_target = 0.0f;
+      heldPostureButtons_ = 0;
+      ctrl.symmetric_leg_motion = 0;
+      setLegHeightTargetPercent(kDefaultLegHeightPercent);
+      setGuardServoAngle(kDefaultGuardAngleDeg);
       break;
     case MotionCommandType::Move:
       if (!maintenance_) {
