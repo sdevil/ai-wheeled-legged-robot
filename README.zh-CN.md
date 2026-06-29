@@ -4,7 +4,7 @@
 
 中文 | [English](README.md)
 
-![WRobot - sdevil Enhanced 原型机](docs/assets/wrobot-sdevil-enhanced.jpg)
+<img src="docs/assets/wrobot-sdevil-enhanced.jpg" alt="WRobot - sdevil Enhanced 原型机" width="420">
 
 WRobot - sdevil Enhanced 是一个基于 ESP32 的轮足机器人平台，用于研究自平衡运动、
 腿部动作、嵌入式视觉以及未来的 AI Agent 控制。ESP32 始终负责实时运动与安全控制，

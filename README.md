@@ -4,7 +4,7 @@
 
 [中文文档](README.zh-CN.md) | English
 
-![WRobot - sdevil Enhanced prototype](docs/assets/wrobot-sdevil-enhanced.jpg)
+<img src="docs/assets/wrobot-sdevil-enhanced.jpg" alt="WRobot - sdevil Enhanced prototype" width="420">
 
 WRobot - sdevil Enhanced is an ESP32-based wheeled-legged robot platform for self-balancing
 motion, articulated leg actions, embedded vision, and future AI agent control.
