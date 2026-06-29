@@ -81,6 +81,11 @@ void CameraGimbalController::pitchDelta(int deltaDeg) {
 
 void CameraGimbalController::trackVertical(int normalizedErrorY, bool locked,
                                            int confidence) {
+  lastTrackSeenMs_ = millis();
+  lastTrackErrorY_ = normalizedErrorY;
+  lastTrackConfidence_ = confidence;
+  lastTrackStepDeg_ = 0;
+
   if (calibrationActive_ || !locked || confidence < kTrackPitchMinConfidence) {
     return;
   }
@@ -97,11 +102,13 @@ void CameraGimbalController::trackVertical(int normalizedErrorY, bool locked,
 
   const int delta = normalizedErrorY > 0 ? -kTrackPitchStepDeg
                                          : kTrackPitchStepDeg;
+  lastTrackStepDeg_ = delta;
   pitchDelta(delta);
 }
 
 void CameraGimbalController::resetPose() {
   targetDeg_ = kCameraStandbyDeg;
+  lastTrackStepDeg_ = 0;
   frontier_servo.set_angle(0);
 }
 
@@ -110,5 +117,10 @@ CameraGimbalTelemetry CameraGimbalController::telemetry() const {
   data.angleDeg = angleDeg_;
   data.targetDeg = targetDeg_;
   data.calibrating = calibrationActive_;
+  data.trackingActive = lastTrackSeenMs_ != 0 && millis() - lastTrackSeenMs_ < 500;
+  data.trackingErrorY = lastTrackErrorY_;
+  data.trackingConfidence = lastTrackConfidence_;
+  data.trackingAgeMs = lastTrackSeenMs_ == 0 ? 0 : millis() - lastTrackSeenMs_;
+  data.trackingStepDeg = lastTrackStepDeg_;
   return data;
 }

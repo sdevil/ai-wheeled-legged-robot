@@ -65,8 +65,8 @@ constexpr char PREF_UI_LANGUAGE[] = "ui_language";
 constexpr char DEFAULT_UI_LANGUAGE[] = "en";
 constexpr char DEFAULT_ROBOT_NAME[] = "WRobot-sdevil";
 constexpr char DEFAULT_CAMERA_RESOLUTION[] = "640x480";
-constexpr char ROBOT_FIRMWARE_VERSION[] = "3.2.109";
-constexpr char ROBOT_FIRMWARE_BUILD[] = "2026-06-29-camera-target-status-01";
+constexpr char ROBOT_FIRMWARE_VERSION[] = "3.2.110";
+constexpr char ROBOT_FIRMWARE_BUILD[] = "2026-06-29-gimbal-pitch-track-01";
 constexpr unsigned long CAMERA_STATUS_STALE_MS = 5000;
 constexpr char CONTROL_MODE_WIFI[] = "wifi";
 constexpr char CONTROL_MODE_GAMEPAD[] = "gamepad";
@@ -394,6 +394,11 @@ void handleDiagnostics() {
          "\",\"count\":" + String(cameraCount) +
          ",\"angle\":" + String(gimbal.angleDeg, 1) +
          ",\"target_angle\":" + String(gimbal.targetDeg, 1) +
+         ",\"tracking_active\":" + String(gimbal.trackingActive ? "true" : "false") +
+         ",\"tracking_error_y\":" + String(gimbal.trackingErrorY) +
+         ",\"tracking_confidence\":" + String(gimbal.trackingConfidence) +
+         ",\"tracking_age_ms\":" + String(gimbal.trackingAgeMs) +
+         ",\"tracking_step_deg\":" + String(gimbal.trackingStepDeg) +
          ",\"protocol\":{\"tx_count\":" + String(cameraProtocolTxCount()) +
          ",\"uart_mode\":\"" + jsonEscape(cameraProtocolUartMode()) +
          "\",\"dedicated_rx_pin\":" + String(cameraProtocolDedicatedRxPin()) +

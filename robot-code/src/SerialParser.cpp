@@ -265,9 +265,16 @@ void parseTrackingObservationCommand(char* cmd) {
   observation.rawScore = rawScorePtr != nullptr ? atoi(rawScorePtr + 3) : confidence;
   observation.velocityX = velocityXPtr != nullptr ? atoi(velocityXPtr + 3) : 0;
   observation.velocityY = velocityYPtr != nullptr ? atoi(velocityYPtr + 3) : 0;
+  const bool hasVisibleTargetBox =
+      observation.targetBoxW > 0 && observation.targetBoxH > 0 &&
+      normalizedY != 9999;
+  const int gimbalConfidence =
+      state == TrackObservationState::Locked && hasVisibleTargetBox
+          ? max(observation.rawScore, 1000)
+          : observation.rawScore;
   cameraGimbal().trackVertical(normalizedY,
                                state == TrackObservationState::Locked,
-                               observation.rawScore);
+                               gimbalConfidence);
   motionGateway().dispatch(observation,
                            String("camera:track:") + trackingStateText(state));
 }

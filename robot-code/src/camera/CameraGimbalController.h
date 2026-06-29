@@ -7,6 +7,11 @@ struct CameraGimbalTelemetry {
   float angleDeg = 105.0f;
   float targetDeg = 105.0f;
   bool calibrating = false;
+  bool trackingActive = false;
+  int trackingErrorY = 0;
+  int trackingConfidence = 0;
+  uint32_t trackingAgeMs = 0;
+  int trackingStepDeg = 0;
 };
 
 class CameraGimbalController {
@@ -23,6 +28,10 @@ class CameraGimbalController {
   float targetDeg_ = 105.0f;
   uint32_t lastUpdateMs_ = 0;
   uint32_t lastTrackPitchMs_ = 0;
+  uint32_t lastTrackSeenMs_ = 0;
+  int lastTrackErrorY_ = 0;
+  int lastTrackConfidence_ = 0;
+  int lastTrackStepDeg_ = 0;
   bool calibrationActive_ = false;
   uint32_t calibrationStartedMs_ = 0;
 };
