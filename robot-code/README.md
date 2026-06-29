@@ -4,7 +4,7 @@ English | [??](README.zh-CN.md)
 
 This PlatformIO project contains the real-time firmware for the ESP32-WROOM-32 mainboard. It owns balance control, FOC, smart servos, actions, safety, Web/WiFi control, gamepad input, settings, and OTA.
 
-Gamepad mapping: RB stands, LB sits, D-pad up/down extends or retracts both legs while held, and D-pad left/right leans the body while held. Releasing the D-pad preserves the current leg height. The left stick drives at high speed, and the right stick controls camera pitch plus chassis yaw. Web and Gamepad movement share the same normalized motion-command path. In the Web UI, leg height is an absolute synchronized slider and body lean is a spring-return center slider.
+Gamepad mapping: RB stands, LB sits, D-pad up/down extends or retracts both legs while held, and D-pad left/right leans the body while held. Releasing the D-pad preserves the current leg height. The left stick drives at high speed, and the right stick controls camera pitch plus chassis yaw. Web and Gamepad movement share the same normalized motion-command path. In the Web UI, leg height is an absolute synchronized slider and body lean uses hold-to-lean buttons that return to neutral on release.
 
 The RGB status LEDs stay off during startup, flash green rapidly three times after the battery, IMU, both smart servos, motion core, and control path pass readiness checks, and breathe red slowly only when battery percentage is 10% or lower. The discrete green GPIO13 LED stays on in Gamepad Bluetooth mode and stays off in WiFi/Web mode.
 
