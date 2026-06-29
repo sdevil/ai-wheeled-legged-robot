@@ -384,7 +384,6 @@ void sendCameraWifiConfig(const String& ssid, const String& password) {
 void sendCameraRuntimeConfig(const String& resolution) {
   sendCameraCommand("CAMCFG:RES=" + percentEncodeForCamera(resolution) + ";",
                     "CAMCFG");
-  updateWebCameraNetworkStatus("PENDING", "", "Camera config sent");
 }
 
 void sendCameraTrackSelection(int x, int y, int width, int height,

@@ -303,6 +303,9 @@ void MotionCoreAdapter::command(const MotionCommand& command) {
         lastLegHeightUpdateMs_ = millis();
       }
       break;
+    case MotionCommandType::GuardServo:
+      setGuardServoAngle(command.x);
+      break;
     case MotionCommandType::MaintenanceEnter:
       maintenance_ = true;
       tracking_ = false;

@@ -193,12 +193,16 @@ void processWebControl() {
   static int lastNonZeroWebJoyY = 0;
   static unsigned long webZeroSinceMs = 0;
   static unsigned long lastTrackScanRetryMs = 0;
+  static unsigned long lastCameraPingMs = 0;
   dispatchWebAction(consumeWebRobotAction());
+  if (millis() - lastCameraPingMs >= 5000) {
+    lastCameraPingMs = millis();
+    sendCameraPing();
+  }
   if (trace_mode && isWebCameraScanPending() &&
       millis() - lastTrackScanRetryMs >= 1000) {
     lastTrackScanRetryMs = millis();
     sendCameraTrackScan();
-    sendCameraPing();
   }
   int legHeightPercent = -1;
   if (consumeWebLegHeightPercent(legHeightPercent)) {
