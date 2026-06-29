@@ -65,7 +65,7 @@ constexpr char PREF_UI_LANGUAGE[] = "ui_language";
 constexpr char DEFAULT_UI_LANGUAGE[] = "en";
 constexpr char DEFAULT_ROBOT_NAME[] = "WRobot-sdevil";
 constexpr char DEFAULT_CAMERA_RESOLUTION[] = "640x480";
-constexpr char ROBOT_FIRMWARE_VERSION[] = "3.2.126";
+constexpr char ROBOT_FIRMWARE_VERSION[] = "3.2.127";
 constexpr char ROBOT_FIRMWARE_BUILD[] = "2026-06-29-public-release-cleanup-01";
 constexpr unsigned long CAMERA_STATUS_STALE_MS = 5000;
 constexpr char CONTROL_MODE_WIFI[] = "wifi";
@@ -466,6 +466,8 @@ void handleDiagnostics() {
          ",\"trigger\":\"" + jsonEscape(motionTrigger) + "\"" +
          ",\"left_leg_position\":" + String(motion.leftLegPosition) +
          ",\"right_leg_position\":" + String(motion.rightLegPosition) +
+         ",\"leg_lean_target\":" + String(motion.legLeanPercent) +
+         ",\"leg_lean_actual\":" + String(motion.legLeanActualPercent) +
          ",\"left_leg_load\":" + String(motion.leftLegLoad) +
          ",\"right_leg_load\":" + String(motion.rightLegLoad) +
          ",\"control_max_gap_us\":" + String(motion.controlLoopMaxGapUs) +

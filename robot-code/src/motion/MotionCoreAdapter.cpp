@@ -280,7 +280,7 @@ void MotionCoreAdapter::command(const MotionCommand& command) {
       if (!maintenance_) {
         ctrl.leg_lean_target = constrain((float)command.x / 100.0f,
                                          -1.0f, 1.0f);
-        if (command.x == 0) ctrl.leg_lean = 0.0f;
+        ctrl.leg_lean = ctrl.leg_lean_target;
       }
       break;
     case MotionCommandType::LegHeight:
@@ -331,6 +331,8 @@ MotionTelemetry MotionCoreAdapter::telemetry() const {
   data.yawRateDeg = ctrl.lqi_param.state.yaw_rate * 180.0f / PI;
   data.legHeightPercent = legHeightPercent();
   data.legLeanPercent = legLeanPercent();
+  data.legLeanActualPercent =
+      constrain((int)roundf(ctrl.leg_lean * 100.0f), -100, 100);
   data.leftLegPosition = sts_servo_state[0].position;
   data.rightLegPosition = sts_servo_state[1].position;
   data.leftLegLoad = sts_servo_state[0].load;
