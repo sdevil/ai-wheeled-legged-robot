@@ -65,7 +65,7 @@ constexpr char PREF_UI_LANGUAGE[] = "ui_language";
 constexpr char DEFAULT_UI_LANGUAGE[] = "en";
 constexpr char DEFAULT_ROBOT_NAME[] = "WRobot-sdevil";
 constexpr char DEFAULT_CAMERA_RESOLUTION[] = "640x480";
-constexpr char ROBOT_FIRMWARE_VERSION[] = "3.2.117";
+constexpr char ROBOT_FIRMWARE_VERSION[] = "3.2.118";
 constexpr char ROBOT_FIRMWARE_BUILD[] = "2026-06-29-public-release-cleanup-01";
 constexpr unsigned long CAMERA_STATUS_STALE_MS = 5000;
 constexpr char CONTROL_MODE_WIFI[] = "wifi";
@@ -93,9 +93,11 @@ int pendingCameraPitchDelta = 0;
 int pendingLegHeightDirection = 99;
 int pendingLegHeightPercent = -1;
 int pendingLegLeanPercent = 999;
+const char* pendingLegLeanSource = "boot";
 unsigned long lastDriveCommandMs = 0;
 uint32_t driveCommandCount = 0;
 uint32_t driveCommandMaxGapMs = 0;
+uint32_t websocketCloseCount = 0;
 unsigned long lastLegHeightCommandMs = 0;
 unsigned long lastLegLeanCommandMs = 0;
 QueueHandle_t actionQueue = nullptr;
@@ -296,6 +298,9 @@ void handleDiagnostics() {
   unsigned long currentDriveUpdatedAt;
   uint32_t currentDriveCommandCount;
   uint32_t currentDriveMaxGapMs;
+  int currentPendingLegLean;
+  const char* currentPendingLegLeanSource;
+  uint32_t currentWebsocketCloseCount;
 
   lockStatus();
   robotNetState = statusRobotNetState;
@@ -318,6 +323,9 @@ void handleDiagnostics() {
   currentDriveUpdatedAt = lastDriveCommandMs;
   currentDriveCommandCount = driveCommandCount;
   currentDriveMaxGapMs = driveCommandMaxGapMs;
+  currentPendingLegLean = pendingLegLeanPercent;
+  currentPendingLegLeanSource = pendingLegLeanSource;
+  currentWebsocketCloseCount = websocketCloseCount;
   portEXIT_CRITICAL(&stateMux);
 
   const unsigned long driveAgeMs =
@@ -382,7 +390,10 @@ void handleDiagnostics() {
          ",\"y\":" + String(currentDriveY) +
          ",\"command_age_ms\":" + String(driveAgeMs) +
          ",\"command_count\":" + String(currentDriveCommandCount) +
-         ",\"max_command_gap_ms\":" + String(currentDriveMaxGapMs) + "}" +
+         ",\"max_command_gap_ms\":" + String(currentDriveMaxGapMs) +
+         ",\"pending_leg_lean\":" + String(currentPendingLegLean == 999 ? 0 : currentPendingLegLean) +
+         ",\"pending_leg_lean_source\":\"" + jsonEscape(currentPendingLegLeanSource) + "\"" +
+         ",\"websocket_close_count\":" + String(currentWebsocketCloseCount) + "}" +
          ",\"camera\":{\"state\":\"" + jsonEscape(cameraState) +
          "\",\"ip\":\"" + jsonEscape(cameraIp) +
          "\",\"resolution\":\"" + jsonEscape(cameraResolution) +
@@ -1042,7 +1053,7 @@ bool setLegHeightPercentCommand(int percent) {
   return true;
 }
 
-bool setLegLeanCommand(int percent) {
+bool setLegLeanCommand(int percent, const char* source) {
   lockStatus();
   const bool controlsLocked = statusMaintenanceMode || statusOtaInProgress;
   unlockStatus();
@@ -1050,6 +1061,7 @@ bool setLegLeanCommand(int percent) {
   percent = constrain(percent, -100, 100);
   portENTER_CRITICAL(&stateMux);
   pendingLegLeanPercent = percent;
+  pendingLegLeanSource = source == nullptr ? "unknown" : source;
   lastLegLeanCommandMs = 0;
   portEXIT_CRITICAL(&stateMux);
   return true;
@@ -1121,9 +1133,7 @@ void stopWebSocketDrive() {
   pendingCameraPitchDelta = 0;
   pendingLegHeightDirection = 0;
   pendingLegHeightPercent = -1;
-  pendingLegLeanPercent = 0;
   lastLegHeightCommandMs = 0;
-  lastLegLeanCommandMs = 0;
   portEXIT_CRITICAL(&stateMux);
 }
 
@@ -1133,6 +1143,9 @@ void closeWebSocketClient() {
   websocketHandshakeComplete = false;
   websocketHandshakeBuffer = "";
   websocketFrameLength = 0;
+  portENTER_CRITICAL(&stateMux);
+  websocketCloseCount++;
+  portEXIT_CRITICAL(&stateMux);
   stopWebSocketDrive();
 }
 
@@ -1226,7 +1239,7 @@ void handleWebSocketMessage(const String& message) {
   if (type == "leg_lean") {
     int percent = 0;
     const bool accepted = jsonIntValue(message, "percent", percent) &&
-                          setLegLeanCommand(percent);
+                          setLegLeanCommand(percent, "ws:leg_lean");
     sendWebSocketAck("leg_lean", requestId, accepted);
     return;
   }
@@ -1470,7 +1483,7 @@ void handleLegLean() {
     server.send(400, "application/json", "{\"error\":\"missing percent\"}");
     return;
   }
-  if (!setLegLeanCommand(server.arg("percent").toInt())) {
+  if (!setLegLeanCommand(server.arg("percent").toInt(), "http:leg_lean")) {
     server.send(423, "application/json", "{\"error\":\"robot locked for maintenance\"}");
     return;
   }
