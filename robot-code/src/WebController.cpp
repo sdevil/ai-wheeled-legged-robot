@@ -1639,6 +1639,11 @@ void handleControlTakeover() {
 }
 
 void handleAction() {
+  const String clientId = requestClientId();
+  if (controlOwnerClientId.length() > 0 && !requestControlsOwned(clientId)) {
+    server.send(409, "application/json", "{\"error\":\"control owned by another device\"}");
+    return;
+  }
   const String name = server.arg("name");
   if (actionFromName(name) == WebRobotAction::None) {
     server.send(400, "application/json", "{\"error\":\"unknown action\"}");

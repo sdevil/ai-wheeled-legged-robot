@@ -562,7 +562,13 @@ export class RobotApi {
 
   async sendAction(name: string) {
     const ack = await this.sendSocketRequest({ type: 'action', name });
-    return ack ? ack : false;
+    if (ack) return ack;
+    try {
+      const response = await this.post('/api/action', { name }, 1800);
+      return response.ok;
+    } catch {
+      return false;
+    }
   }
 
   async takeOverControl() {
