@@ -65,8 +65,8 @@ constexpr char PREF_UI_LANGUAGE[] = "ui_language";
 constexpr char DEFAULT_UI_LANGUAGE[] = "en";
 constexpr char DEFAULT_ROBOT_NAME[] = "WRobot-sdevil";
 constexpr char DEFAULT_CAMERA_RESOLUTION[] = "640x480";
-constexpr char ROBOT_FIRMWARE_VERSION[] = "3.2.150";
-constexpr char ROBOT_FIRMWARE_BUILD[] = "2026-06-30-waltz-demo-02";
+constexpr char ROBOT_FIRMWARE_VERSION[] = "3.2.151";
+constexpr char ROBOT_FIRMWARE_BUILD[] = "2026-06-30-websocket-takeover-01";
 constexpr unsigned long CAMERA_STATUS_STALE_MS = 5000;
 constexpr char CONTROL_MODE_WIFI[] = "wifi";
 constexpr char CONTROL_MODE_GAMEPAD[] = "gamepad";
@@ -1072,6 +1072,20 @@ void closeWebSocketClient() {
   stopWebSocketDrive();
 }
 
+void adoptWebSocketClient(WiFiClient& candidate, const char* reason) {
+  if (websocketClient && websocketClient.connected()) {
+    recordDiagnosticEvent("network",
+                          String("ws client replaced: ") + reason);
+    closeWebSocketClient();
+  }
+  websocketClient = candidate;
+  websocketHadClient = true;
+  websocketClient.setNoDelay(true);
+  websocketHandshakeComplete = false;
+  websocketHandshakeBuffer = "";
+  websocketFrameLength = 0;
+}
+
 void sendWebSocketFrame(uint8_t opcode, const uint8_t* payload, size_t length) {
   if (!websocketClient.connected() || length > 125) return;
   const uint8_t header[2] = {
@@ -1309,17 +1323,24 @@ void processWebSocketFrames() {
 }
 
 void pollWebSocket() {
+  WiFiClient candidate = websocketServer.available();
+  if (candidate) {
+    const bool currentConnected =
+        websocketClient && websocketClient.connected();
+    if (!currentConnected) {
+      adoptWebSocketClient(candidate, "accept");
+    } else {
+      const bool sameEndpoint =
+          candidate.remoteIP() == websocketClient.remoteIP() &&
+          candidate.remotePort() == websocketClient.remotePort();
+      if (!sameEndpoint) {
+        adoptWebSocketClient(candidate, "takeover");
+      }
+    }
+  }
+
   if (!websocketClient || !websocketClient.connected()) {
     if (websocketHadClient) closeWebSocketClient();
-    WiFiClient candidate = websocketServer.available();
-    if (candidate) {
-      websocketClient = candidate;
-      websocketHadClient = true;
-      websocketClient.setNoDelay(true);
-      websocketHandshakeComplete = false;
-      websocketHandshakeBuffer = "";
-      websocketFrameLength = 0;
-    }
     return;
   }
 
