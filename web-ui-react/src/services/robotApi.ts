@@ -58,6 +58,8 @@ export class RobotApi {
   private wsConnectTimer: number | null = null;
   private suppressCloseNotice = false;
   private websocketClosedHandler?: () => void;
+  private socketReadyPromise?: Promise<boolean>;
+  private resolveSocketReady?: (ready: boolean) => void;
   private host: string;
   private transportMode: TransportMode;
   private requestId = 1;
@@ -82,6 +84,10 @@ export class RobotApi {
 
   onWebsocketClosed(handler: (() => void) | undefined) {
     this.websocketClosedHandler = handler;
+  }
+
+  openControlChannel() {
+    void this.ensureSocket();
   }
 
   private getBaseHttp() {
@@ -266,12 +272,18 @@ export class RobotApi {
   }
 
   private async ensureSocket() {
-    if (this.transportMode === 'http') return;
-    if (this.ws && (this.ws.readyState === WebSocket.OPEN || this.ws.readyState === WebSocket.CONNECTING)) return;
+    if (this.transportMode === 'http') return false;
+    if (this.wsReady && this.ws?.readyState === WebSocket.OPEN) return true;
+    if (this.ws && this.ws.readyState === WebSocket.CONNECTING && this.socketReadyPromise) {
+      return this.socketReadyPromise;
+    }
     try {
       const socket = new WebSocket(this.getWsUrl());
       this.ws = socket;
       this.suppressCloseNotice = false;
+      this.socketReadyPromise = new Promise<boolean>((resolve) => {
+        this.resolveSocketReady = resolve;
+      });
       this.wsConnectTimer = window.setTimeout(() => {
         if (this.ws === socket && socket.readyState === WebSocket.CONNECTING) socket.close();
       }, 1500);
@@ -280,6 +292,8 @@ export class RobotApi {
         if (this.wsConnectTimer !== null) window.clearTimeout(this.wsConnectTimer);
         this.wsConnectTimer = null;
         this.wsReady = true;
+        this.resolveSocketReady?.(true);
+        this.resolveSocketReady = undefined;
       };
       socket.onmessage = (event) => {
         if (this.ws !== socket) return;
@@ -307,6 +321,9 @@ export class RobotApi {
         this.wsConnectTimer = null;
         this.wsReady = false;
         this.ws = undefined;
+        this.resolveSocketReady?.(false);
+        this.resolveSocketReady = undefined;
+        this.socketReadyPromise = undefined;
         this.resolveAllAcks(false);
         if (shouldNotify) this.websocketClosedHandler?.();
       };
@@ -315,8 +332,13 @@ export class RobotApi {
         this.wsReady = false;
         socket.close();
       };
+      return this.socketReadyPromise;
     } catch {
       this.wsReady = false;
+      this.resolveSocketReady?.(false);
+      this.resolveSocketReady = undefined;
+      this.socketReadyPromise = undefined;
+      return false;
     }
   }
 
@@ -350,8 +372,9 @@ export class RobotApi {
     return false;
   }
 
-  private sendSocketRequest(payload: Record<string, unknown>) {
-    if (!this.wsReady || this.ws?.readyState !== WebSocket.OPEN) return null;
+  private async sendSocketRequest(payload: Record<string, unknown>) {
+    const ready = await this.ensureSocket();
+    if (!ready || !this.wsReady || this.ws?.readyState !== WebSocket.OPEN) return null;
     const id = this.requestId++;
     const promise = new Promise<boolean>((resolve) => {
       const timer = window.setTimeout(() => {
@@ -488,7 +511,7 @@ export class RobotApi {
     selection: { x: number; y: number; w: number; h: number },
     profile = 0,
   ) {
-    const ack = this.sendSocketRequest({ type: 'track_roi', ...selection, profile });
+    const ack = await this.sendSocketRequest({ type: 'track_roi', ...selection, profile });
     return ack ? ack : false;
   }
 
@@ -497,12 +520,12 @@ export class RobotApi {
   }
 
   async sendTrackScan() {
-    const ack = this.sendSocketRequest({ type: 'track_unlock' });
+    const ack = await this.sendSocketRequest({ type: 'track_unlock' });
     return ack ? ack : false;
   }
 
   async sendAction(name: string) {
-    const ack = this.sendSocketRequest({ type: 'action', name });
+    const ack = await this.sendSocketRequest({ type: 'action', name });
     return ack ? ack : false;
   }
 
@@ -581,6 +604,9 @@ export class RobotApi {
   disposeSocket() {
     if (this.wsConnectTimer !== null) window.clearTimeout(this.wsConnectTimer);
     this.wsConnectTimer = null;
+    this.resolveSocketReady?.(false);
+    this.resolveSocketReady = undefined;
+    this.socketReadyPromise = undefined;
     this.resolveAllAcks(false);
     if (this.ws) {
       this.suppressCloseNotice = true;

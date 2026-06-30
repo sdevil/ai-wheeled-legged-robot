@@ -669,6 +669,7 @@ export default function App() {
   useEffect(() => {
     api.setHost(host);
     api.setTransport(transport);
+    api.openControlChannel();
     const controller = new AbortController();
     let stopped = false;
 
