@@ -508,6 +508,10 @@ void controller::sit_loop(uint32_t tick)
             sit_start_leg_height = leg_height_base;
             roll_adjust = 0.0f;
             roll_adjust_target = 0.0f;
+            leg_lean = 0.0f;
+            leg_lean_target = 0.0f;
+            symmetric_leg_motion = 1;
+            force_sync_leg_motion = 1;
 
             sts3032.set_torque_switch(SERVO_LEFT, 1);
             sts3032.set_torque_switch(SERVO_RIGHT, 1);
@@ -542,6 +546,11 @@ void controller::sit_loop(uint32_t tick)
             if(!sit_retract_started)
             {
                 leg_height_base = sit_low_height;
+                symmetric_leg_motion = 0;
+                force_sync_leg_motion = 0;
+                sts3032.set(SERVO_LEFT, SERVO_LEFT_MIN, 450, 250);
+                sts3032.set(SERVO_RIGHT, SERVO_RIGHT_MIN, 450, 250);
+                sts3032.move();
                 sts3032.set_torque_switch(SERVO_LEFT, 2);
                 sts3032.set_torque_switch(SERVO_RIGHT, 2);
                 sit_retract_started = 1;
@@ -558,6 +567,11 @@ void controller::sit_loop(uint32_t tick)
                 enable_motor = 0;
                 left_motor.move(0.0f);
                 right_motor.move(0.0f);
+                symmetric_leg_motion = 0;
+                force_sync_leg_motion = 0;
+                sts3032.set(SERVO_LEFT, SERVO_LEFT_MIN, 450, 250);
+                sts3032.set(SERVO_RIGHT, SERVO_RIGHT_MIN, 450, 250);
+                sts3032.move();
                 sts3032.set_torque_switch(SERVO_LEFT, 2);
                 sts3032.set_torque_switch(SERVO_RIGHT, 2);
                 sts3032.set_torque_switch(SERVO_LEFT, 2);
@@ -567,6 +581,8 @@ void controller::sit_loop(uint32_t tick)
             break;
 
         case fsm::sit_state::DONE:
+            symmetric_leg_motion = 0;
+            force_sync_leg_motion = 0;
             if(buttons & BTN_LS)
             {
                 sts3032.set_torque_switch(SERVO_LEFT, 0);
@@ -587,6 +603,8 @@ void controller::sit_loop(uint32_t tick)
             break;
 
         case fsm::sit_state::EXIT_PREPARE:
+            symmetric_leg_motion = 0;
+            force_sync_leg_motion = 0;
             if(balance_recover_prepare_loop(tick))
             {
                 fsm_state_machine.sit = fsm::sit_state::EXIT_RECOVER;
@@ -594,6 +612,8 @@ void controller::sit_loop(uint32_t tick)
             break;
 
         case fsm::sit_state::EXIT_RECOVER:
+            symmetric_leg_motion = 0;
+            force_sync_leg_motion = 0;
             if(balance_recover_loop(tick))
             {
                 sit_mode_flag = 0.0f;
@@ -602,6 +622,8 @@ void controller::sit_loop(uint32_t tick)
             break;
 
         case fsm::sit_state::EXIT:
+            symmetric_leg_motion = 0;
+            force_sync_leg_motion = 0;
             break;
     }
 }
