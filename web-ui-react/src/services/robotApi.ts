@@ -40,6 +40,8 @@ const mockModel = (host: string): DashboardModel => ({
   cameraIp: '',
   cameraUrl: '',
   clients: 0,
+  controlOwnerPresent: false,
+  controlOwner: true,
   otaRunning: false,
   otaProgress: 0,
   otaMessage: '',
@@ -52,10 +54,20 @@ const mockModel = (host: string): DashboardModel => ({
 export type SaveResult = { ok: boolean; message: string; connectionLost?: boolean };
 type AckWaiter = { resolve: (ok: boolean) => void; timer: number };
 
+function getOrCreateClientId() {
+  const key = 'wrobot.clientId';
+  const existing = localStorage.getItem(key);
+  if (existing) return existing;
+  const created = `client-${Math.random().toString(36).slice(2, 10)}-${Date.now().toString(36)}`;
+  localStorage.setItem(key, created);
+  return created;
+}
+
 export class RobotApi {
   private ws?: WebSocket;
   private wsReady = false;
   private wsConnectTimer: number | null = null;
+  private wsReconnectTimer: number | null = null;
   private suppressCloseNotice = false;
   private websocketClosedHandler?: () => void;
   private socketReadyPromise?: Promise<boolean>;
@@ -64,6 +76,7 @@ export class RobotApi {
   private transportMode: TransportMode;
   private requestId = 1;
   private ackWaiters = new Map<number, AckWaiter>();
+  private readonly clientId = getOrCreateClientId();
 
   constructor(host: string, transportMode: TransportMode) {
     this.host = host;
@@ -94,8 +107,16 @@ export class RobotApi {
     return `http://${this.host}`;
   }
 
+  private withClientId(path: string) {
+    const url = new URL(`${this.getBaseHttp()}${path}`);
+    url.searchParams.set('client_id', this.clientId);
+    return url.toString();
+  }
+
   private getWsUrl() {
-    return `ws://${this.host}:81/ws`;
+    const url = new URL(`ws://${this.host}:81/ws`);
+    url.searchParams.set('client_id', this.clientId);
+    return url.toString();
   }
 
   private transportLabel() {
@@ -157,12 +178,15 @@ export class RobotApi {
 
   async fetchStatus(cameraUrlOverride = '', signal?: AbortSignal): Promise<DashboardModel> {
     try {
-      const response = await this.fetchWithTimeout(`${this.getBaseHttp()}/api/status`, {
+      const response = await this.fetchWithTimeout(this.withClientId('/api/status'), {
         cache: 'no-store',
       }, 1800, signal);
       if (!response.ok) throw new Error(String(response.status));
       const data = (await response.json()) as RobotStatus;
-      void this.ensureSocket();
+      const controlOwnerPresent = data.control_owner_present === true;
+      const controlOwner = data.control_owner !== false;
+      if (!controlOwnerPresent || controlOwner) void this.ensureSocket();
+      else this.disposeSocket();
       const cameraUrl = data.camera_net_ip
         ? `http://${data.camera_net_ip}:8080/stream.mjpg`
         : data.camera_url || cameraUrlOverride;
@@ -223,6 +247,8 @@ export class RobotApi {
         cameraIp: data.camera_net_ip,
         cameraUrl,
         clients: data.clients,
+        controlOwnerPresent,
+        controlOwner,
         activeMode,
         maintenanceMode: data.maintenance,
         otaRunning: data.ota_running,
@@ -241,7 +267,7 @@ export class RobotApi {
 
   async fetchSettings(signal?: AbortSignal): Promise<RobotSettings | null> {
     try {
-      const response = await this.fetchWithTimeout(`${this.getBaseHttp()}/api/settings`, {
+      const response = await this.fetchWithTimeout(this.withClientId('/api/settings'), {
         cache: 'no-store',
       }, 2500, signal);
       if (!response.ok) throw new Error(String(response.status));
@@ -253,7 +279,7 @@ export class RobotApi {
 
   async fetchDiagnostics(signal?: AbortSignal): Promise<DiagnosticsSnapshot | null> {
     try {
-      const response = await this.fetchWithTimeout(`${this.getBaseHttp()}/api/diagnostics`, {
+      const response = await this.fetchWithTimeout(this.withClientId('/api/diagnostics'), {
         cache: 'no-store',
       }, 1800, signal);
       if (!response.ok) throw new Error(String(response.status));
@@ -277,6 +303,10 @@ export class RobotApi {
     if (this.ws && this.ws.readyState === WebSocket.CONNECTING && this.socketReadyPromise) {
       return this.socketReadyPromise;
     }
+    if (this.wsReconnectTimer !== null) {
+      window.clearTimeout(this.wsReconnectTimer);
+      this.wsReconnectTimer = null;
+    }
     try {
       const socket = new WebSocket(this.getWsUrl());
       this.ws = socket;
@@ -286,7 +316,7 @@ export class RobotApi {
       });
       this.wsConnectTimer = window.setTimeout(() => {
         if (this.ws === socket && socket.readyState === WebSocket.CONNECTING) socket.close();
-      }, 1500);
+      }, 5000);
       socket.onopen = () => {
         if (this.ws !== socket) return;
         if (this.wsConnectTimer !== null) window.clearTimeout(this.wsConnectTimer);
@@ -326,6 +356,12 @@ export class RobotApi {
         this.socketReadyPromise = undefined;
         this.resolveAllAcks(false);
         if (shouldNotify) this.websocketClosedHandler?.();
+        if (this.transportMode !== 'http' && document.visibilityState === 'visible') {
+          this.wsReconnectTimer = window.setTimeout(() => {
+            this.wsReconnectTimer = null;
+            void this.ensureSocket();
+          }, 600);
+        }
       };
       socket.onerror = () => {
         if (this.ws !== socket) return;
@@ -343,7 +379,7 @@ export class RobotApi {
   }
 
   private async post(path: string, params: Record<string, string> = {}, timeoutMs = 800) {
-    const url = new URL(`${this.getBaseHttp()}${path}`);
+    const url = new URL(this.withClientId(path));
     Object.entries(params).forEach(([key, value]) => url.searchParams.set(key, value));
     const controller = new AbortController();
     const timer = window.setTimeout(() => controller.abort(), timeoutMs);
@@ -355,7 +391,7 @@ export class RobotApi {
   }
 
   private async postForm(path: string, params: Record<string, string> = {}) {
-    return this.fetchWithTimeout(`${this.getBaseHttp()}${path}`, {
+    return this.fetchWithTimeout(this.withClientId(path), {
       method: 'POST',
       headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
       body: new URLSearchParams(params),
@@ -493,9 +529,9 @@ export class RobotApi {
     this.sendSocketNow({ type: 'drive', x: 0, y: 0 });
     this.sendSocketNow({ type: 'leg_height', direction: 0 });
     this.sendSocketNow({ type: 'leg_lean', percent: 0, source: 'emergency_stop' });
-    const url = `${this.getBaseHttp()}/api/drive?x=0&y=0`;
-    const legHeightUrl = `${this.getBaseHttp()}/api/legs/height?direction=0`;
-    const legLeanUrl = `${this.getBaseHttp()}/api/legs/lean?percent=0`;
+    const url = `${this.withClientId('/api/drive')}&x=0&y=0`;
+    const legHeightUrl = `${this.withClientId('/api/legs/height')}&direction=0`;
+    const legLeanUrl = `${this.withClientId('/api/legs/lean')}&percent=0`;
     if (navigator.sendBeacon) navigator.sendBeacon(url);
     else void fetch(url, { method: 'POST', keepalive: true });
     if (navigator.sendBeacon) {
@@ -529,6 +565,17 @@ export class RobotApi {
     return ack ? ack : false;
   }
 
+  async takeOverControl() {
+    try {
+      const response = await this.post('/api/control/takeover', {}, 1800);
+      if (!response.ok) return false;
+      this.disposeSocket();
+      return await this.ensureSocket();
+    } catch {
+      return false;
+    }
+  }
+
   uploadFirmware(file: File, onProgress: (percent: number) => void, usbPowered = false) {
     return new Promise<SaveResult>((resolve) => {
       const request = new XMLHttpRequest();
@@ -536,7 +583,9 @@ export class RobotApi {
         usb_powered: usbPowered ? '1' : '0',
         size: String(file.size),
       });
-      request.open('POST', `${this.getBaseHttp()}/api/ota/upload?${query.toString()}`);
+      const uploadUrl = new URL(this.withClientId('/api/ota/upload'));
+      query.forEach((value, key) => uploadUrl.searchParams.set(key, value));
+      request.open('POST', uploadUrl.toString());
       request.upload.onprogress = (event) => {
         if (event.lengthComputable) onProgress(Math.round((event.loaded * 100) / event.total));
       };
@@ -604,6 +653,8 @@ export class RobotApi {
   disposeSocket() {
     if (this.wsConnectTimer !== null) window.clearTimeout(this.wsConnectTimer);
     this.wsConnectTimer = null;
+    if (this.wsReconnectTimer !== null) window.clearTimeout(this.wsReconnectTimer);
+    this.wsReconnectTimer = null;
     this.resolveSocketReady?.(false);
     this.resolveSocketReady = undefined;
     this.socketReadyPromise = undefined;

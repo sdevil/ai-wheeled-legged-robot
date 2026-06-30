@@ -37,6 +37,7 @@ const IPAddress WIFI_AP_SUBNET(255, 255, 255, 0);
 constexpr unsigned long COMMAND_TIMEOUT_MS = 10000;
 constexpr uint16_t WEBSOCKET_PORT = 81;
 constexpr size_t WEBSOCKET_MAX_FRAME_SIZE = 384;
+constexpr unsigned long WEBSOCKET_IDLE_TIMEOUT_MS = 4500;
 constexpr unsigned long STA_CONNECT_TIMEOUT_MS = 15000;
 constexpr unsigned long STA_RETRY_INTERVAL_MS = 30000;
 constexpr unsigned long STA_BOOT_DELAY_MS = 3000;
@@ -65,8 +66,8 @@ constexpr char PREF_UI_LANGUAGE[] = "ui_language";
 constexpr char DEFAULT_UI_LANGUAGE[] = "en";
 constexpr char DEFAULT_ROBOT_NAME[] = "WRobot-sdevil";
 constexpr char DEFAULT_CAMERA_RESOLUTION[] = "640x480";
-constexpr char ROBOT_FIRMWARE_VERSION[] = "3.2.157";
-constexpr char ROBOT_FIRMWARE_BUILD[] = "2026-06-30-waltz-choreo-01";
+constexpr char ROBOT_FIRMWARE_VERSION[] = "3.2.158";
+constexpr char ROBOT_FIRMWARE_BUILD[] = "2026-06-30-websocket-mobile-01";
 constexpr unsigned long CAMERA_STATUS_STALE_MS = 5000;
 constexpr char CONTROL_MODE_WIFI[] = "wifi";
 constexpr char CONTROL_MODE_GAMEPAD[] = "gamepad";
@@ -78,7 +79,10 @@ WiFiClient websocketClient;
 TaskHandle_t webTaskHandle = nullptr;
 bool websocketHandshakeComplete = false;
 bool websocketHadClient = false;
+unsigned long websocketLastActivityMs = 0;
 String websocketHandshakeBuffer;
+String websocketClientId;
+String controlOwnerClientId;
 uint8_t websocketFrameBuffer[WEBSOCKET_MAX_FRAME_SIZE + 16];
 size_t websocketFrameLength = 0;
 QueueHandle_t actionQueue = nullptr;
@@ -144,6 +148,54 @@ void unlockStatus() {
 
 bool cameraTargetLockedLabel(const String& label);
 String trackRoiEventMessage(int x, int y, int width, int height, int profile);
+
+String requestClientId() {
+  if (!server.hasArg("client_id")) return "";
+  String value = server.arg("client_id");
+  value.trim();
+  if (value.length() > 48) value = value.substring(0, 48);
+  return value;
+}
+
+String parseWebSocketClientId(const String& header) {
+  const int lineEnd = header.indexOf("\r\n");
+  if (lineEnd <= 0) return "";
+  const String requestLine = header.substring(0, lineEnd);
+  const int firstSpace = requestLine.indexOf(' ');
+  if (firstSpace < 0) return "";
+  const int secondSpace = requestLine.indexOf(' ', firstSpace + 1);
+  if (secondSpace < 0) return "";
+  const String target = requestLine.substring(firstSpace + 1, secondSpace);
+  const int queryStart = target.indexOf('?');
+  if (queryStart < 0) return "";
+  const String query = target.substring(queryStart + 1);
+  int position = 0;
+  while (position < static_cast<int>(query.length())) {
+    int nextAmp = query.indexOf('&', position);
+    if (nextAmp < 0) nextAmp = query.length();
+    const String part = query.substring(position, nextAmp);
+    const int equals = part.indexOf('=');
+    String key = equals >= 0 ? part.substring(0, equals) : part;
+    String value = equals >= 0 ? part.substring(equals + 1) : "";
+    if (key == "client_id") {
+      value.trim();
+      if (value.length() > 48) value = value.substring(0, 48);
+      return value;
+    }
+    position = nextAmp + 1;
+  }
+  return "";
+}
+
+bool requestControlsOwned(const String& clientId) {
+  return clientId.length() > 0 && controlOwnerClientId.length() > 0 &&
+         clientId == controlOwnerClientId;
+}
+
+void adoptControlOwner(const String& clientId) {
+  if (clientId.isEmpty()) return;
+  controlOwnerClientId = clientId;
+}
 
 String jsonEscape(const String& input) {
   String out;
@@ -635,6 +687,10 @@ bool otaPrecheck(String& reason, bool usbPoweredOverride = false) {
 }
 
 void sendJsonStatus() {
+  const String clientId = requestClientId();
+  if (controlOwnerClientId.isEmpty() && clientId.length() > 0) {
+    adoptControlOwner(clientId);
+  }
   bool enabled;
   bool sitting;
   bool gamepad;
@@ -697,6 +753,8 @@ void sendJsonStatus() {
   const unsigned long cameraVersionAgeMs =
       cameraVersionSeenMs == 0 ? 0 : millis() - cameraVersionSeenMs;
   const bool cameraVersionStale = cameraVersionSeenMs == 0;
+  const bool controlOwnerPresent = !controlOwnerClientId.isEmpty();
+  const bool controlOwner = requestControlsOwned(clientId);
 
   String json = "{\"boot_id\":" + String(statusBootId) +
                 ",\"firmware_version\":\"" + String(ROBOT_FIRMWARE_VERSION) + "\"" +
@@ -721,6 +779,8 @@ void sendJsonStatus() {
                 ",\"robot_wifi_rssi\":" + String(WiFi.status() == WL_CONNECTED ? WiFi.RSSI() : 0) +
                 ",\"robot_wifi_channel\":" + String(WiFi.channel()) +
                 ",\"mdns_active\":" + String(mdnsActive ? "true" : "false") +
+                ",\"control_owner_present\":" + String(controlOwnerPresent ? "true" : "false") +
+                ",\"control_owner\":" + String(controlOwner ? "true" : "false") +
                 ",\"camera_net_state\":\"" + jsonEscape(cameraNetState) + "\"" +
                 ",\"camera_net_ip\":\"" + jsonEscape(cameraNetIp) + "\"" +
                 ",\"camera_net_message\":\"" + jsonEscape(cameraNetMessage) + "\"" +
@@ -1066,7 +1126,9 @@ void closeWebSocketClient() {
   if (websocketClient) websocketClient.stop();
   websocketHadClient = false;
   websocketHandshakeComplete = false;
+  websocketLastActivityMs = 0;
   websocketHandshakeBuffer = "";
+  websocketClientId = "";
   websocketFrameLength = 0;
   webControlNoteWebsocketClosed();
   stopWebSocketDrive();
@@ -1082,7 +1144,9 @@ void adoptWebSocketClient(WiFiClient& candidate, const char* reason) {
   websocketHadClient = true;
   websocketClient.setNoDelay(true);
   websocketHandshakeComplete = false;
+  websocketLastActivityMs = millis();
   websocketHandshakeBuffer = "";
+  websocketClientId = "";
   websocketFrameLength = 0;
 }
 
@@ -1132,6 +1196,10 @@ void handleWebSocketMessage(const String& message) {
   if (!jsonStringValue(message, "type", type)) return;
   int requestId = 0;
   jsonIntValue(message, "id", requestId);
+  if (controlOwnerClientId.length() > 0 && websocketClientId != controlOwnerClientId) {
+    sendWebSocketAck(type.c_str(), requestId, false);
+    return;
+  }
 
   if (type == "drive") {
     int x = 0;
@@ -1140,6 +1208,11 @@ void handleWebSocketMessage(const String& message) {
         setDriveCommand(x, y)) {
       sendWebSocketAck("drive", requestId, true);
     }
+    return;
+  }
+
+  if (type == "ping") {
+    sendWebSocketAck("ping", requestId, true);
     return;
   }
 
@@ -1330,12 +1403,7 @@ void pollWebSocket() {
     if (!currentConnected) {
       adoptWebSocketClient(candidate, "accept");
     } else {
-      const bool sameEndpoint =
-          candidate.remoteIP() == websocketClient.remoteIP() &&
-          candidate.remotePort() == websocketClient.remotePort();
-      if (!sameEndpoint) {
-        adoptWebSocketClient(candidate, "takeover");
-      }
+      candidate.stop();
     }
   }
 
@@ -1353,6 +1421,19 @@ void pollWebSocket() {
     const int headerEnd = websocketHandshakeBuffer.indexOf("\r\n\r\n");
     if (headerEnd < 0) {
       if (websocketHandshakeBuffer.length() >= 2048) closeWebSocketClient();
+      return;
+    }
+
+    const String candidateClientId = parseWebSocketClientId(websocketHandshakeBuffer);
+    if (candidateClientId.isEmpty()) {
+      closeWebSocketClient();
+      return;
+    }
+    if (controlOwnerClientId.isEmpty()) {
+      adoptControlOwner(candidateClientId);
+    }
+    if (candidateClientId != controlOwnerClientId) {
+      closeWebSocketClient();
       return;
     }
 
@@ -1378,6 +1459,7 @@ void pollWebSocket() {
         "Connection: Upgrade\r\n"
         "Sec-WebSocket-Accept: " +
         acceptKey + "\r\n\r\n");
+    websocketClientId = candidateClientId;
     websocketHandshakeComplete = true;
     websocketHandshakeBuffer = "";
     sendWebSocketText("{\"type\":\"ready\"}");
@@ -1388,6 +1470,11 @@ void pollWebSocket() {
 }
 
 void handleDrive() {
+  const String clientId = requestClientId();
+  if (controlOwnerClientId.length() > 0 && !requestControlsOwned(clientId)) {
+    server.send(409, "application/json", "{\"error\":\"control owned by another device\"}");
+    return;
+  }
   if (!server.hasArg("x") || !server.hasArg("y")) {
     server.send(400, "application/json", "{\"error\":\"missing x or y\"}");
     return;
@@ -1400,6 +1487,11 @@ void handleDrive() {
 }
 
 void handleCameraPitch() {
+  const String clientId = requestClientId();
+  if (controlOwnerClientId.length() > 0 && !requestControlsOwned(clientId)) {
+    server.send(409, "application/json", "{\"error\":\"control owned by another device\"}");
+    return;
+  }
   if (statusMaintenanceMode || statusOtaInProgress) {
     server.send(423, "application/json", "{\"error\":\"robot locked for maintenance\"}");
     return;
@@ -1415,6 +1507,11 @@ void handleCameraPitch() {
 }
 
 void handleLegHeight() {
+  const String clientId = requestClientId();
+  if (controlOwnerClientId.length() > 0 && !requestControlsOwned(clientId)) {
+    server.send(409, "application/json", "{\"error\":\"control owned by another device\"}");
+    return;
+  }
   if (!server.hasArg("direction")) {
     server.send(400, "application/json", "{\"error\":\"missing direction\"}");
     return;
@@ -1427,6 +1524,11 @@ void handleLegHeight() {
 }
 
 void handleLegHeightValue() {
+  const String clientId = requestClientId();
+  if (controlOwnerClientId.length() > 0 && !requestControlsOwned(clientId)) {
+    server.send(409, "application/json", "{\"error\":\"control owned by another device\"}");
+    return;
+  }
   if (!server.hasArg("percent")) {
     server.send(400, "application/json", "{\"error\":\"missing percent\"}");
     return;
@@ -1439,6 +1541,11 @@ void handleLegHeightValue() {
 }
 
 void handleLegLean() {
+  const String clientId = requestClientId();
+  if (controlOwnerClientId.length() > 0 && !requestControlsOwned(clientId)) {
+    server.send(409, "application/json", "{\"error\":\"control owned by another device\"}");
+    return;
+  }
   if (!server.hasArg("percent")) {
     server.send(400, "application/json", "{\"error\":\"missing percent\"}");
     return;
@@ -1514,6 +1621,20 @@ void handleTrackDistanceAdjust() {
     return;
   }
   sendCameraTrackDistanceAdjust(server.arg("value").toInt());
+  server.send(200, "application/json", "{\"ok\":true}");
+}
+
+void handleControlTakeover() {
+  const String clientId = requestClientId();
+  if (clientId.isEmpty()) {
+    server.send(400, "application/json", "{\"error\":\"missing client_id\"}");
+    return;
+  }
+  adoptControlOwner(clientId);
+  if (websocketClient.connected() && websocketClientId.length() > 0 &&
+      websocketClientId != clientId) {
+    closeWebSocketClient();
+  }
   server.send(200, "application/json", "{\"ok\":true}");
 }
 
@@ -1681,6 +1802,7 @@ void webServerTask(void *) {
   server.on("/api/diagnostics", HTTP_GET, handleDiagnostics);
   server.on("/api/settings", HTTP_GET, sendJsonSettings);
   server.on("/api/settings", HTTP_POST, handleSettingsUpdate);
+  server.on("/api/control/takeover", HTTP_POST, handleControlTakeover);
   server.on("/api/robot/apply_wifi", HTTP_POST, handleApplyRobotWiFi);
   server.on("/api/robot/save_wifi", HTTP_POST, handleSaveRobotWiFi);
   server.on("/api/robot/connect_wifi", HTTP_POST, handleConnectRobotWiFi);

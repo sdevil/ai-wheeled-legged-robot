@@ -68,6 +68,7 @@ type CameraPreviewUrls = {
 const DEFAULT_ROBOT_NAME = 'WRobot-sdevil';
 const copyByLanguage = {
   en: {
+    viewOnly: 'Viewing only', takeOverControl: 'Take Over Control',
     gamepadMac: 'Gamepad MAC address',
     diagnostics: 'Diagnostics', liveDiagnostics: 'Live diagnostics', refreshDiagnostics: 'Refresh', copyDiagnostics: 'Copy', diagnosticsCopied: 'Copied', diagnosticsCopyFailed: 'Copy failed',
     online: 'Online', offline: 'Offline', idle: 'Idle', standby: 'Standby', active: 'Active', sitting: 'Sitting', noTarget: 'No Target', selectTarget: 'Tap a detected target to lock; tap again to unlock',
@@ -82,6 +83,7 @@ const copyByLanguage = {
     otaFirmware: 'Firmware Update', firmwareVersion: 'Firmware', cameraFirmwareVersion: 'Camera', selectFirmware: 'Select firmware .bin', otaFileExample: 'File name example: wrobot_firmware_3.2.51.bin', uploadFirmware: 'Upload Firmware', rollbackFirmware: 'Rollback Firmware', otaHint: 'Firmware OTA requires at least 30% battery, or manual confirmation of stable external power.', usbPowered: 'External power confirmed', passwordStored: 'Stored - leave blank to keep unchanged',
   },
   zh: {
+    viewOnly: '仅查看', takeOverControl: '接管控制',
     gamepadMac: '手柄 MAC 地址',
     diagnostics: '诊断', liveDiagnostics: '实时诊断', refreshDiagnostics: '刷新', copyDiagnostics: '复制', diagnosticsCopied: '已复制', diagnosticsCopyFailed: '复制失败',
     online: '在线', offline: '离线', idle: '空闲', standby: '待命', active: '运行中', sitting: '坐下', noTarget: '无目标', selectTarget: '点击识别目标锁定，再次点击解锁',
@@ -283,6 +285,8 @@ const initialTelemetry: DashboardModel = {
   cameraIp: '',
   cameraUrl: initialCameraUrl,
   clients: 0,
+  controlOwnerPresent: false,
+  controlOwner: true,
   otaRunning: false,
   otaProgress: 0,
   otaMessage: '',
@@ -330,6 +334,8 @@ export default function App() {
   const [driveControlActive, setDriveControlActive] = useState(false);
   const driveControlActiveRef = useRef(false);
   const otaLockedRef = useRef(false);
+  const controlOwnerRef = useRef(true);
+  const controlOwnerPresentRef = useRef(false);
   const pollTimer = useRef<number | null>(null);
   const refreshSequence = useRef(0);
   const actionInFlight = useRef(false);
@@ -342,6 +348,7 @@ export default function App() {
     [cameraUrl, telemetry.cameraUrl],
   );
   const otaLocked = otaBusy || telemetry.otaRunning;
+  const controlsLocked = telemetry.controlOwnerPresent && !telemetry.controlOwner;
   const otaPowerOk = telemetry.batteryPercent >= 30 || usbPoweredOverride;
   const otaDisplayProgress = otaBusy
     ? otaProgress
@@ -521,7 +528,7 @@ export default function App() {
   }
 
   async function handleActionPress(action: string) {
-    if (actionInFlight.current || otaLocked) return;
+    if (actionInFlight.current || otaLocked || controlsLocked) return;
     actionInFlight.current = true;
     const isToggleMode = action === 'track_mode' || action === 'waltz_show';
     const nextAction = isToggleMode && telemetry.activeMode === action
@@ -604,6 +611,13 @@ export default function App() {
     setOtaBusy(false);
   }
 
+  async function handleTakeOverControl() {
+    if (otaLocked) return;
+    const ok = await api.takeOverControl();
+    setSettingsMessage(ok ? 'Control transferred to this device' : 'Take over failed');
+    await refresh();
+  }
+
   useEffect(() => {
     cameraUrlRef.current = cameraUrl;
   }, [cameraUrl]);
@@ -654,6 +668,11 @@ export default function App() {
   }, [otaLocked]);
 
   useEffect(() => {
+    controlOwnerRef.current = telemetry.controlOwner;
+    controlOwnerPresentRef.current = telemetry.controlOwnerPresent;
+  }, [telemetry.controlOwner, telemetry.controlOwnerPresent]);
+
+  useEffect(() => {
     if (legHeightDraft === null) return;
     const timer = window.setTimeout(() => setLegHeightDraft(null), 900);
     return () => window.clearTimeout(timer);
@@ -669,11 +688,16 @@ export default function App() {
   useEffect(() => {
     api.setHost(host);
     api.setTransport(transport);
-    api.openControlChannel();
+    if (!controlOwnerPresentRef.current || controlOwnerRef.current) {
+      api.openControlChannel();
+    }
     const controller = new AbortController();
     let stopped = false;
 
     const poll = async () => {
+      if (!controlOwnerPresentRef.current || controlOwnerRef.current) {
+        api.openControlChannel();
+      }
       if (!driveControlActiveRef.current && !otaLockedRef.current) await refresh(controller.signal);
       if (!stopped) pollTimer.current = window.setTimeout(poll, 1000);
     };
@@ -703,6 +727,35 @@ export default function App() {
         <Box sx={{ maxWidth: 720, mx: 'auto' }}>
           <TopBar telemetry={telemetry} robotName={robotName.trim() || DEFAULT_ROBOT_NAME} copy={copy} />
 
+          {controlsLocked ? (
+            <Paper
+              sx={{
+                mt: 1,
+                px: 1.2,
+                py: 0.9,
+                borderRadius: 1.25,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                gap: 1,
+                bgcolor: '#0d1017',
+                border: '1px solid rgba(82,98,134,.28)',
+              }}
+            >
+              <Typography sx={{ fontSize: 12.5, fontWeight: 700, color: 'text.secondary' }}>
+                {copy.viewOnly}
+              </Typography>
+              <Button
+                size="small"
+                variant="contained"
+                onClick={() => void handleTakeOverControl()}
+                sx={{ borderRadius: 1.1, minWidth: 0, px: 1.1 }}
+              >
+                {copy.takeOverControl}
+              </Button>
+            </Paper>
+          ) : null}
+
           <Stack
             spacing={1.1}
             sx={{
@@ -727,13 +780,16 @@ export default function App() {
                 telemetry={telemetry}
                 cameraUrl={otaLocked ? '' : effectiveCameraUrl}
                 onPreviewActiveChange={handleCameraPreviewActiveChange}
-                trackingEnabled={telemetry.activeMode === 'track_mode'}
+                trackingEnabled={telemetry.activeMode === 'track_mode' && !controlsLocked}
                 selectTargetLabel={copy.selectTarget}
                 targetLocked={isTargetLocked(telemetry.targetLabelRaw)}
                 onTrackSelection={(selection) =>
-                  void api.sendTrackSelection(selection)
+                  controlsLocked ? undefined : void api.sendTrackSelection(selection)
                 }
-                onTrackUnlock={() => void api.sendTrackUnlock()}
+                onTrackUnlock={() => {
+                  if (controlsLocked) return;
+                  void api.sendTrackUnlock();
+                }}
               />
             </Box>
 
@@ -748,7 +804,8 @@ export default function App() {
               }}
             >
               <ControlPanel>
-                <VirtualJoystick
+                <Box sx={{ pointerEvents: controlsLocked ? 'none' : 'auto', opacity: controlsLocked ? 0.52 : 1 }}>
+                  <VirtualJoystick
                   title={copy.moveControl}
                   footerLabel={copy.moveSpeed}
                   speedLabels={{ low: copy.low, medium: copy.medium, high: copy.high, extreme: copy.extreme }}
@@ -767,25 +824,30 @@ export default function App() {
                       label={copy.bodyLean}
                       value={legLeanDraft}
                       onChange={(value) => {
+                        if (controlsLocked) return;
                         setLegLeanDraft(value);
                         api.sendLegLean(value, 'slider_change');
                       }}
                     />
                   }
-                />
+                  />
+                </Box>
               </ControlPanel>
 
               <ControlPanel>
-                <VirtualJoystick
+                <Box sx={{ pointerEvents: controlsLocked ? 'none' : 'auto', opacity: controlsLocked ? 0.52 : 1 }}>
+                  <VirtualJoystick
                   title={copy.gimbalControl}
                   footerLabel={copy.gimbalSpeed}
                   speedLabels={{ low: copy.low, medium: copy.medium, high: copy.high, extreme: copy.extreme }}
                   speedValue={gimbalSpeed}
                   onSpeedChange={() => undefined}
                   onMove={(x, y) => {
+                    if (controlsLocked) return;
                     void api.sendGimbal(x, y, gimbalSpeed);
                   }}
                   onEnd={() => {
+                    if (controlsLocked) return;
                     void api.sendGimbal(0, 0, gimbalSpeed);
                   }}
                   beforeFooter={
@@ -793,6 +855,7 @@ export default function App() {
                       label={copy.legHeight}
                       value={legHeightDraft ?? telemetry.legHeightPercent}
                       onChange={(value) => {
+                        if (controlsLocked) return;
                         setLegHeightDraft(value);
                         api.sendLegHeightValue(value);
                       }}
@@ -803,16 +866,18 @@ export default function App() {
                       label={copy.guard}
                       value={guardAngle}
                       onChange={(value) => {
+                        if (controlsLocked) return;
                         setGuardAngle(value);
                         api.sendGuardServo(value);
                       }}
                     />
                   }
-                />
+                  />
+                </Box>
               </ControlPanel>
             </Box>
 
-            <ModeActionStrip activeMode={telemetry.activeMode} copy={copy} onAction={handleActionPress} />
+            <ModeActionStrip activeMode={telemetry.activeMode} copy={copy} onAction={handleActionPress} disabled={controlsLocked} />
 
             <Box
               sx={{
@@ -1747,10 +1812,12 @@ function ModeActionStrip({
   activeMode,
   copy,
   onAction,
+  disabled = false,
 }: {
   activeMode: string;
   copy: (typeof copyByLanguage)[UiLanguage];
   onAction: (action: string) => void | Promise<void>;
+  disabled?: boolean;
 }) {
   const toggleModes = new Set(['track_mode', 'waltz_show']);
 
@@ -1762,6 +1829,7 @@ function ModeActionStrip({
           return (
             <Button
               key={item.action}
+              disabled={disabled}
               variant={selected ? 'contained' : 'outlined'}
               startIcon={item.icon}
               sx={{

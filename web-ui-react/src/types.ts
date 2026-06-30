@@ -6,6 +6,8 @@ export interface RobotStatus {
   boot_id: number;
   firmware_version: string;
   firmware_build: string;
+  control_owner_present?: boolean;
+  control_owner?: boolean;
   camera_firmware_version: string;
   camera_firmware_build: string;
   camera_status_age_ms?: number;
@@ -71,6 +73,8 @@ export interface DashboardModel {
   cameraIp: string;
   cameraUrl: string;
   clients: number;
+  controlOwnerPresent: boolean;
+  controlOwner: boolean;
   otaRunning: boolean;
   otaProgress: number;
   otaMessage: string;
