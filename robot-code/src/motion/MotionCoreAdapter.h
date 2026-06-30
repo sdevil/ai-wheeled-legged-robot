@@ -28,6 +28,7 @@ class MotionCoreAdapter final : public MotionCore {
   void setGuardServoAngle(int angleDeg);
   int legHeightPercent() const;
   int legLeanPercent() const;
+  int currentLegLeanLimitPercent() const;
   float legHeightBaseFromPercent(int percent) const;
   const char* modeName() const;
   const char* trackingStateName() const;

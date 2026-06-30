@@ -39,8 +39,11 @@ constexpr float kLegHeightControlMax = 49.0f;
 constexpr float kLegHeightSlewPerSecond = 42.0f;
 constexpr uint32_t kLegHeightForceSyncHoldMs = 220;
 constexpr int kDefaultLegHeightPercent = 55;
-constexpr int kLegHeightStableMaxPercent = 88;
-constexpr int kLegLeanStableMaxPercent = 85;
+constexpr int kLegHeightStableMaxPercent = 90;
+constexpr int kLegLeanStableMaxPercent = 72;
+constexpr int kHighLegLeanReduceStartPercent = 78;
+constexpr int kHighLegLeanMinPercent = 20;
+constexpr int kHighLegSyncStartPercent = 88;
 constexpr int kDefaultGuardAngleDeg = 0;
 constexpr uint32_t kTrackSettleMs = 300;
 constexpr uint32_t kTrackBalanceStableMs = 500;
@@ -324,9 +327,9 @@ void MotionCoreAdapter::command(const MotionCommand& command) {
       break;
     case MotionCommandType::LegLean:
       if (!maintenance_) {
+        const int dynamicLimit = currentLegLeanLimitPercent();
         const int stableLeanPercent =
-            constrain(command.x, -kLegLeanStableMaxPercent,
-                      kLegLeanStableMaxPercent);
+            constrain(command.x, -dynamicLimit, dynamicLimit);
         ctrl.leg_lean_target =
             constrain((float)stableLeanPercent / 100.0f, -1.0f, 1.0f);
       }
@@ -499,13 +502,35 @@ float MotionCoreAdapter::legHeightBaseFromPercent(int percent) const {
 
 int MotionCoreAdapter::legHeightPercent() const {
   const float normalized =
-      (kLegHeightBaseMax - ctrl.leg_height_base) /
-      (kLegHeightBaseMax - kLegHeightBaseMin);
+      (kLegHeightControlMax - ctrl.leg_height_base) /
+      (kLegHeightControlMax - kLegHeightControlMin);
   return constrain((int)roundf(normalized * 100.0f), 0, 100);
 }
 
 int MotionCoreAdapter::legLeanPercent() const {
   return constrain((int)roundf(ctrl.leg_lean_target * 100.0f), -100, 100);
+}
+
+int MotionCoreAdapter::currentLegLeanLimitPercent() const {
+  const int currentHeightPercent =
+      max(legHeightPercent(), max(0, legHeightTargetPercent_));
+  if (currentHeightPercent <= kHighLegLeanReduceStartPercent) {
+    return kLegLeanStableMaxPercent;
+  }
+
+  const float span =
+      (float)(kLegHeightStableMaxPercent - kHighLegLeanReduceStartPercent);
+  const float progress =
+      span <= 0.0f
+          ? 1.0f
+          : constrain((currentHeightPercent - kHighLegLeanReduceStartPercent) /
+                          span,
+                      0.0f, 1.0f);
+  const float limited =
+      kLegLeanStableMaxPercent -
+      progress * (kLegLeanStableMaxPercent - kHighLegLeanMinPercent);
+  return constrain((int)roundf(limited), kHighLegLeanMinPercent,
+                   kLegLeanStableMaxPercent);
 }
 
 void MotionCoreAdapter::updateLegHeightTarget(uint32_t now) {
@@ -522,9 +547,12 @@ void MotionCoreAdapter::updateLegHeightTarget(uint32_t now) {
   const uint32_t elapsedMs =
       lastLegHeightUpdateMs_ == 0 ? 2 : now - lastLegHeightUpdateMs_;
   lastLegHeightUpdateMs_ = now;
+  const bool keepHighLegSync = legHeightTargetPercent_ >= kHighLegSyncStartPercent;
   const bool keepSync =
-      legHeightForceSync_ || static_cast<int32_t>(now - legHeightForceSyncHoldUntilMs_) < 0;
+      keepHighLegSync || legHeightForceSync_ ||
+      static_cast<int32_t>(now - legHeightForceSyncHoldUntilMs_) < 0;
   ctrl.force_sync_leg_motion = keepSync ? 1 : 0;
+  ctrl.symmetric_leg_motion = keepSync ? 1 : ctrl.symmetric_leg_motion;
   const float dt = min(elapsedMs, (uint32_t)50) / 1000.0f;
   ctrl.leg_height_base = approach(ctrl.leg_height_base, legHeightBaseTarget_,
                                   kLegHeightSlewPerSecond * dt);
@@ -532,7 +560,10 @@ void MotionCoreAdapter::updateLegHeightTarget(uint32_t now) {
     ctrl.leg_height_base = legHeightBaseTarget_;
     legHeightTargetActive_ = false;
     legHeightForceSync_ = false;
-    ctrl.symmetric_leg_motion = 0;
+    if (!keepHighLegSync) {
+      ctrl.symmetric_leg_motion = 0;
+      ctrl.force_sync_leg_motion = 0;
+    }
   }
 }
 
@@ -550,7 +581,7 @@ void MotionCoreAdapter::setLegHeightTargetPercent(int percent) {
   legHeightTargetPercent_ = percent;
   legHeightBaseTarget_ = requestedTarget;
   legHeightForceSync_ =
-      requestedTarget < ctrl.leg_height_base || percent >= 95;
+      requestedTarget < ctrl.leg_height_base || percent >= kHighLegSyncStartPercent;
   legHeightForceSyncHoldUntilMs_ = millis() + kLegHeightForceSyncHoldMs;
   legHeightTargetActive_ = !alreadyAtTarget;
   ctrl.symmetric_leg_motion = 1;
