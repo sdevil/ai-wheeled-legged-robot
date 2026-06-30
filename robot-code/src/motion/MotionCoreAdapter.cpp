@@ -39,6 +39,8 @@ constexpr float kLegHeightControlMax = 49.0f;
 constexpr float kLegHeightSlewPerSecond = 42.0f;
 constexpr uint32_t kLegHeightForceSyncHoldMs = 220;
 constexpr int kDefaultLegHeightPercent = 55;
+constexpr int kLegHeightStableMaxPercent = 88;
+constexpr int kLegLeanStableMaxPercent = 85;
 constexpr int kDefaultGuardAngleDeg = 0;
 constexpr uint32_t kTrackSettleMs = 300;
 constexpr uint32_t kTrackBalanceStableMs = 500;
@@ -322,8 +324,11 @@ void MotionCoreAdapter::command(const MotionCommand& command) {
       break;
     case MotionCommandType::LegLean:
       if (!maintenance_) {
-        ctrl.leg_lean_target = constrain((float)command.x / 100.0f,
-                                         -1.0f, 1.0f);
+        const int stableLeanPercent =
+            constrain(command.x, -kLegLeanStableMaxPercent,
+                      kLegLeanStableMaxPercent);
+        ctrl.leg_lean_target =
+            constrain((float)stableLeanPercent / 100.0f, -1.0f, 1.0f);
       }
       break;
     case MotionCommandType::LegHeight:
@@ -536,7 +541,7 @@ void MotionCoreAdapter::armDefaultStandPose() {
 }
 
 void MotionCoreAdapter::setLegHeightTargetPercent(int percent) {
-  percent = constrain(percent, 0, 100);
+  percent = constrain(percent, 0, kLegHeightStableMaxPercent);
   heldPostureButtons_ = 0;
   const float requestedTarget = legHeightBaseFromPercent(percent);
   const bool samePercent = (legHeightTargetPercent_ == percent);
