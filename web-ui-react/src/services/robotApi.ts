@@ -52,7 +52,6 @@ const mockModel = (host: string): DashboardModel => ({
 });
 
 export type SaveResult = { ok: boolean; message: string; connectionLost?: boolean };
-type AckWaiter = { resolve: (ok: boolean) => void; timer: number };
 
 function getOrCreateClientId() {
   const key = 'wrobot.clientId';
@@ -74,8 +73,6 @@ export class RobotApi {
   private resolveSocketReady?: (ready: boolean) => void;
   private host: string;
   private transportMode: TransportMode;
-  private requestId = 1;
-  private ackWaiters = new Map<number, AckWaiter>();
   private readonly clientId = getOrCreateClientId();
 
   constructor(host: string, transportMode: TransportMode) {
@@ -289,14 +286,6 @@ export class RobotApi {
     }
   }
 
-  private resolveAllAcks(ok: boolean) {
-    this.ackWaiters.forEach(({ resolve, timer }) => {
-      window.clearTimeout(timer);
-      resolve(ok);
-    });
-    this.ackWaiters.clear();
-  }
-
   private async ensureSocket() {
     if (this.transportMode === 'http') return false;
     if (this.wsReady && this.ws?.readyState === WebSocket.OPEN) return true;
@@ -325,19 +314,8 @@ export class RobotApi {
         this.resolveSocketReady?.(true);
         this.resolveSocketReady = undefined;
       };
-      socket.onmessage = (event) => {
+      socket.onmessage = () => {
         if (this.ws !== socket) return;
-        try {
-          const message = JSON.parse(String(event.data)) as { id?: number; ok?: boolean };
-          if (typeof message.id !== 'number') return;
-          const waiter = this.ackWaiters.get(message.id);
-          if (!waiter) return;
-          window.clearTimeout(waiter.timer);
-          this.ackWaiters.delete(message.id);
-          waiter.resolve(message.ok === true);
-        } catch {
-          // Ignore non-JSON diagnostic frames.
-        }
       };
       socket.onclose = () => {
         if (this.ws !== socket) return;
@@ -354,7 +332,6 @@ export class RobotApi {
         this.resolveSocketReady?.(false);
         this.resolveSocketReady = undefined;
         this.socketReadyPromise = undefined;
-        this.resolveAllAcks(false);
         if (shouldNotify) this.websocketClosedHandler?.();
         if (this.transportMode !== 'http' && document.visibilityState === 'visible') {
           this.wsReconnectTimer = window.setTimeout(() => {
@@ -407,22 +384,6 @@ export class RobotApi {
     void this.ensureSocket();
     return false;
   }
-
-  private async sendSocketRequest(payload: Record<string, unknown>) {
-    const ready = await this.ensureSocket();
-    if (!ready || !this.wsReady || this.ws?.readyState !== WebSocket.OPEN) return null;
-    const id = this.requestId++;
-    const promise = new Promise<boolean>((resolve) => {
-      const timer = window.setTimeout(() => {
-        this.ackWaiters.delete(id);
-        resolve(false);
-      }, 800);
-      this.ackWaiters.set(id, { resolve, timer });
-    });
-    this.ws.send(JSON.stringify({ ...payload, id }));
-    return promise;
-  }
-
 
   async saveAllSettings(params: {
     robotName: string;
@@ -490,7 +451,7 @@ export class RobotApi {
 
   sendTrackDistanceAdjust(value: number) {
     const adjusted = Math.max(-100, Math.min(100, Math.round(value)));
-    this.sendSocketNow({ type: 'track_distance', value: adjusted });
+    void this.post('/api/camera/track_distance', { value: String(adjusted) }, 1200);
   }
 
   sendGimbal(x: number, y: number, speed: number) {
@@ -547,8 +508,18 @@ export class RobotApi {
     selection: { x: number; y: number; w: number; h: number },
     profile = 0,
   ) {
-    const ack = await this.sendSocketRequest({ type: 'track_roi', ...selection, profile });
-    return ack ? ack : false;
+    try {
+      const response = await this.post('/api/camera/track', {
+        x: String(selection.x),
+        y: String(selection.y),
+        w: String(selection.w),
+        h: String(selection.h),
+        profile: String(profile),
+      }, 1800);
+      return response.ok;
+    } catch {
+      return false;
+    }
   }
 
   async sendTrackUnlock() {
@@ -556,13 +527,15 @@ export class RobotApi {
   }
 
   async sendTrackScan() {
-    const ack = await this.sendSocketRequest({ type: 'track_unlock' });
-    return ack ? ack : false;
+    try {
+      const response = await this.post('/api/camera/track_unlock', {}, 1800);
+      return response.ok;
+    } catch {
+      return false;
+    }
   }
 
   async sendAction(name: string) {
-    const ack = await this.sendSocketRequest({ type: 'action', name });
-    if (ack) return ack;
     try {
       const response = await this.post('/api/action', { name }, 1800);
       return response.ok;
@@ -664,7 +637,6 @@ export class RobotApi {
     this.resolveSocketReady?.(false);
     this.resolveSocketReady = undefined;
     this.socketReadyPromise = undefined;
-    this.resolveAllAcks(false);
     if (this.ws) {
       this.suppressCloseNotice = true;
       this.ws.close();

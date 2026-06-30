@@ -1,9 +1,9 @@
 import {
   BatteryFull,
   CenterFocusStrong,
-  ContentCopy,
   ChevronLeft,
   ChevronRight,
+  ContentCopy,
   HexagonOutlined,
   HomeOutlined,
   KeyboardArrowDown,
@@ -70,6 +70,7 @@ const copyByLanguage = {
   en: {
     viewOnly: 'Viewing only', takeOverControl: 'Take Over Control',
     gamepadMac: 'Gamepad MAC address',
+    actionOrder: 'Action Order',
     diagnostics: 'Diagnostics', liveDiagnostics: 'Live diagnostics', refreshDiagnostics: 'Refresh', copyDiagnostics: 'Copy', diagnosticsCopied: 'Copied', diagnosticsCopyFailed: 'Copy failed',
     online: 'Online', offline: 'Offline', idle: 'Idle', standby: 'Standby', active: 'Active', sitting: 'Sitting', noTarget: 'No Target', selectTarget: 'Tap a detected target to lock; tap again to unlock',
     moveControl: 'Drive Control', moveSpeed: 'Drive Speed', gimbalControl: 'Gimbal Control', gimbalSpeed: 'Gimbal Speed', guard: 'Guard', legHeight: 'Leg Height', extendLegs: 'Extend legs', retractLegs: 'Retract legs', bodyLean: 'Body Lean', leanLeft: 'Lean left', leanRight: 'Lean right',
@@ -85,6 +86,7 @@ const copyByLanguage = {
   zh: {
     viewOnly: '仅查看', takeOverControl: '接管控制',
     gamepadMac: '手柄 MAC 地址',
+    actionOrder: '动作排序',
     diagnostics: '诊断', liveDiagnostics: '实时诊断', refreshDiagnostics: '刷新', copyDiagnostics: '复制', diagnosticsCopied: '已复制', diagnosticsCopyFailed: '复制失败',
     online: '在线', offline: '离线', idle: '空闲', standby: '待命', active: '运行中', sitting: '坐下', noTarget: '无目标', selectTarget: '点击识别目标锁定，再次点击解锁',
     moveControl: '移动控制', moveSpeed: '移动速度', gimbalControl: '云台控制', gimbalSpeed: '云台速度', guard: '护板', legHeight: '腿部高度', extendLegs: '伸腿', retractLegs: '缩腿', bodyLean: '左右侧身', leanLeft: '向左侧身', leanRight: '向右侧身',
@@ -225,6 +227,7 @@ const initialTransport =
 const initialUiLanguage: UiLanguage = 'en';
 
 const api = new RobotApi(initialHost, initialTransport);
+const ACTION_ORDER_KEY = 'wrobot.actionOrder';
 
 type ActionLabelKey =
   | 'stand'
@@ -250,6 +253,21 @@ const actionButtons: { labelKey: ActionLabelKey; action: string; icon: ReactNode
   { labelKey: 'jumpLeft', action: 'jump_left', icon: <SportsKabaddi /> },
   { labelKey: 'jumpRight', action: 'jump_right', icon: <SportsKabaddi /> },
 ];
+
+function loadActionOrder() {
+  const defaults = actionButtons.map((item) => item.action);
+  try {
+    const raw = localStorage.getItem(ACTION_ORDER_KEY);
+    if (!raw) return defaults;
+    const parsed = JSON.parse(raw) as string[];
+    const known = new Set(defaults);
+    const filtered = parsed.filter((value) => known.has(value));
+    const missing = defaults.filter((value) => !filtered.includes(value));
+    return [...filtered, ...missing];
+  } catch {
+    return defaults;
+  }
+}
 
 const initialTelemetry: DashboardModel = {
   bootId: 0,
@@ -315,6 +333,7 @@ export default function App() {
   const [savedHomeWifiSsid, setSavedHomeWifiSsid] = useState('');
   const [homeWifiPassword, setHomeWifiPassword] = useState('');
   const [settingsMessage, setSettingsMessage] = useState('');
+  const [actionOrder, setActionOrder] = useState<string[]>(loadActionOrder);
   const [driveSpeed, setDriveSpeed] = useState(100);
   const gimbalSpeed = 100;
   const [guardAngle, setGuardAngle] = useState(0);
@@ -347,6 +366,12 @@ export default function App() {
     () => telemetry.cameraUrl || cameraUrl,
     [cameraUrl, telemetry.cameraUrl],
   );
+  const orderedActionButtons = useMemo(() => {
+    const byId = new Map(actionButtons.map((item) => [item.action, item]));
+    return actionOrder
+      .map((action) => byId.get(action))
+      .filter((item): item is (typeof actionButtons)[number] => Boolean(item));
+  }, [actionOrder]);
   const otaLocked = otaBusy || telemetry.otaRunning;
   const controlsLocked = telemetry.controlOwnerPresent && !telemetry.controlOwner;
   const otaPowerOk = telemetry.batteryPercent >= 30 || usbPoweredOverride;
@@ -546,6 +571,10 @@ export default function App() {
       if (accepted && ['stand', 'sit', 'reset'].includes(nextAction)) {
         setLegLeanDraft(0);
       }
+      if (accepted && nextAction === 'reset') {
+        setLegHeightDraft(55);
+        setGuardAngle(0);
+      }
       if (accepted && action === 'track_mode' && nextAction === 'track_mode') {
         await api.sendTrackScan();
       }
@@ -677,6 +706,14 @@ export default function App() {
     const timer = window.setTimeout(() => setLegHeightDraft(null), 900);
     return () => window.clearTimeout(timer);
   }, [legHeightDraft]);
+
+  useEffect(() => {
+    localStorage.setItem(ACTION_ORDER_KEY, JSON.stringify(actionOrder));
+  }, [actionOrder]);
+
+  useEffect(() => {
+    setGuardAngle(telemetry.guardServoAngle);
+  }, [telemetry.guardServoAngle]);
 
   useEffect(() => {
     if (telemetry.maintenanceMode || otaLocked) return;
@@ -877,7 +914,13 @@ export default function App() {
               </ControlPanel>
             </Box>
 
-            <ModeActionStrip activeMode={telemetry.activeMode} copy={copy} onAction={handleActionPress} disabled={controlsLocked} />
+            <ModeActionStrip
+              activeMode={telemetry.activeMode}
+              copy={copy}
+              onAction={handleActionPress}
+              disabled={controlsLocked}
+              actions={orderedActionButtons}
+            />
 
             <Box
               sx={{
@@ -983,6 +1026,58 @@ export default function App() {
             <MenuItem value="wifi">WiFi / Web</MenuItem>
             <MenuItem value="gamepad">Gamepad / Bluetooth</MenuItem>
           </TextField>
+
+          <Typography color="text.secondary" sx={{ fontSize: 12, fontWeight: 700 }}>
+            {copy.actionOrder}
+          </Typography>
+          <Stack spacing={0.6}>
+            {orderedActionButtons.map((item, index) => (
+              <Stack
+                key={item.action}
+                direction="row"
+                spacing={0.8}
+                sx={{ alignItems: 'center', justifyContent: 'space-between' }}
+              >
+                <Typography sx={{ fontSize: 12.5, minWidth: 0, flex: 1 }}>
+                  {copy[item.labelKey]}
+                </Typography>
+                <Stack direction="row" spacing={0.5}>
+                  <IconButton
+                    size="small"
+                    disabled={index === 0}
+                    onClick={() => {
+                      if (index === 0) return;
+                      setActionOrder((current) => {
+                        const next = [...current];
+                        const tmp = next[index - 1];
+                        next[index - 1] = next[index];
+                        next[index] = tmp;
+                        return next;
+                      });
+                    }}
+                  >
+                    <ChevronLeft />
+                  </IconButton>
+                  <IconButton
+                    size="small"
+                    disabled={index === orderedActionButtons.length - 1}
+                    onClick={() => {
+                      if (index >= orderedActionButtons.length - 1) return;
+                      setActionOrder((current) => {
+                        const next = [...current];
+                        const tmp = next[index + 1];
+                        next[index + 1] = next[index];
+                        next[index] = tmp;
+                        return next;
+                      });
+                    }}
+                  >
+                    <ChevronRight />
+                  </IconButton>
+                </Stack>
+              </Stack>
+            ))}
+          </Stack>
 
           {controlMode === 'gamepad' ? (
             <TextField
@@ -1813,18 +1908,20 @@ function ModeActionStrip({
   copy,
   onAction,
   disabled = false,
+  actions,
 }: {
   activeMode: string;
   copy: (typeof copyByLanguage)[UiLanguage];
   onAction: (action: string) => void | Promise<void>;
   disabled?: boolean;
+  actions: { labelKey: ActionLabelKey; action: string; icon: ReactNode }[];
 }) {
   const toggleModes = new Set(['track_mode', 'waltz_show']);
 
   return (
     <InfoCard title={copy.commonActions}>
-      <PagedStrip columns="calc((100% - 24px) / 4)" pageSize={4} itemCount={actionButtons.length}>
-        {actionButtons.map((item) => {
+      <PagedStrip columns="calc((100% - 24px) / 4)" pageSize={4} itemCount={actions.length}>
+        {actions.map((item) => {
           const selected = toggleModes.has(item.action) && activeMode === item.action;
           return (
             <Button
@@ -2046,33 +2143,54 @@ function PagedStrip({
   const trackRef = useRef<HTMLDivElement | null>(null);
   const [page, setPage] = useState(0);
   const pageCount = Math.max(1, Math.ceil(itemCount / pageSize));
+  const scrollByPage = (direction: -1 | 1) => {
+    const el = trackRef.current;
+    if (!el) return;
+    el.scrollTo({
+      left: Math.max(0, el.scrollLeft + el.clientWidth * direction),
+      behavior: 'smooth',
+    });
+  };
 
   return (
     <Stack spacing={0.7}>
-      <Box
-        ref={trackRef}
-        onScroll={(event) => {
-          const el = event.currentTarget;
-          const nextPage =
-            el.clientWidth > 0 ? Math.round(el.scrollLeft / el.clientWidth) : 0;
-          if (nextPage !== page) setPage(nextPage);
-        }}
-        sx={{
-          display: 'grid',
-          gridAutoFlow: 'column',
-          gridAutoColumns: columns,
-          gap: 1,
-          overflowX: 'auto',
-          overscrollBehaviorX: 'contain',
-          scrollSnapType: 'x mandatory',
-          pb: 0.2,
-          '& > *': { scrollSnapAlign: 'start' },
-          '&::-webkit-scrollbar': { display: 'none' },
-          scrollbarWidth: 'none',
-        }}
-      >
-        {children}
-      </Box>
+      <Stack direction="row" spacing={0.6} sx={{ alignItems: 'stretch' }}>
+        {pageCount > 1 ? (
+          <IconButton sx={miniRoundButtonSx} onClick={() => scrollByPage(-1)}>
+            <ChevronLeft />
+          </IconButton>
+        ) : null}
+        <Box
+          ref={trackRef}
+          onScroll={(event) => {
+            const el = event.currentTarget;
+            const nextPage =
+              el.clientWidth > 0 ? Math.round(el.scrollLeft / el.clientWidth) : 0;
+            if (nextPage !== page) setPage(nextPage);
+          }}
+          sx={{
+            flex: 1,
+            display: 'grid',
+            gridAutoFlow: 'column',
+            gridAutoColumns: columns,
+            gap: 1,
+            overflowX: 'auto',
+            overscrollBehaviorX: 'contain',
+            scrollSnapType: 'x mandatory',
+            pb: 0.2,
+            '& > *': { scrollSnapAlign: 'start' },
+            '&::-webkit-scrollbar': { display: 'none' },
+            scrollbarWidth: 'none',
+          }}
+        >
+          {children}
+        </Box>
+        {pageCount > 1 ? (
+          <IconButton sx={miniRoundButtonSx} onClick={() => scrollByPage(1)}>
+            <ChevronRight />
+          </IconButton>
+        ) : null}
+      </Stack>
       {pageCount > 1 ? (
         <Stack direction="row" spacing={0.6} sx={{ justifyContent: 'center' }}>
           {Array.from({ length: pageCount }).map((_, index) => (

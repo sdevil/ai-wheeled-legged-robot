@@ -1563,6 +1563,11 @@ void expireLegControlCommands() {
 
 
 void handleTrackSelection() {
+  const String clientId = requestClientId();
+  if (controlOwnerClientId.length() > 0 && !requestControlsOwned(clientId)) {
+    server.send(409, "application/json", "{\"error\":\"control owned by another device\"}");
+    return;
+  }
   if (statusMaintenanceMode || statusOtaInProgress) {
     server.send(423, "application/json", "{\"error\":\"robot locked\"}");
     return;
@@ -1602,6 +1607,11 @@ String trackRoiEventMessage(int x, int y, int width, int height, int profile) {
 }
 
 void handleTrackUnlock() {
+  const String clientId = requestClientId();
+  if (controlOwnerClientId.length() > 0 && !requestControlsOwned(clientId)) {
+    server.send(409, "application/json", "{\"error\":\"control owned by another device\"}");
+    return;
+  }
   if (statusMaintenanceMode || statusOtaInProgress) {
     server.send(423, "application/json", "{\"error\":\"robot locked\"}");
     return;
@@ -1612,6 +1622,11 @@ void handleTrackUnlock() {
 }
 
 void handleTrackDistanceAdjust() {
+  const String clientId = requestClientId();
+  if (controlOwnerClientId.length() > 0 && !requestControlsOwned(clientId)) {
+    server.send(409, "application/json", "{\"error\":\"control owned by another device\"}");
+    return;
+  }
   if (statusMaintenanceMode || statusOtaInProgress) {
     server.send(423, "application/json", "{\"error\":\"robot locked\"}");
     return;
