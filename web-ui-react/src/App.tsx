@@ -334,6 +334,7 @@ export default function App() {
   const [homeWifiPassword, setHomeWifiPassword] = useState('');
   const [settingsMessage, setSettingsMessage] = useState('');
   const [actionOrder, setActionOrder] = useState<string[]>(loadActionOrder);
+  const [draggedAction, setDraggedAction] = useState<string | null>(null);
   const [driveSpeed, setDriveSpeed] = useState(100);
   const gimbalSpeed = 100;
   const [guardAngle, setGuardAngle] = useState(0);
@@ -462,6 +463,19 @@ export default function App() {
     localStorage.setItem('wrobot.host', nextHost);
     localStorage.setItem('wrobot.cameraUrl', cameraUrl);
     localStorage.setItem('wrobot.transport', transport);
+  }
+
+  function moveActionOrder(sourceAction: string, targetAction: string) {
+    if (!sourceAction || !targetAction || sourceAction === targetAction) return;
+    setActionOrder((current) => {
+      const sourceIndex = current.indexOf(sourceAction);
+      const targetIndex = current.indexOf(targetAction);
+      if (sourceIndex < 0 || targetIndex < 0 || sourceIndex === targetIndex) return current;
+      const next = [...current];
+      next.splice(sourceIndex, 1);
+      next.splice(targetIndex, 0, sourceAction);
+      return next;
+    });
   }
 
   async function handleSaveSettings() {
@@ -1031,51 +1045,50 @@ export default function App() {
             {copy.actionOrder}
           </Typography>
           <Stack spacing={0.6}>
-            {orderedActionButtons.map((item, index) => (
-              <Stack
+            {orderedActionButtons.map((item) => (
+              <Paper
                 key={item.action}
-                direction="row"
-                spacing={0.8}
-                sx={{ alignItems: 'center', justifyContent: 'space-between' }}
+                draggable
+                onDragStart={() => setDraggedAction(item.action)}
+                onDragEnd={() => setDraggedAction(null)}
+                onDragOver={(event) => {
+                  event.preventDefault();
+                  event.dataTransfer.dropEffect = 'move';
+                }}
+                onDrop={(event) => {
+                  event.preventDefault();
+                  if (draggedAction) moveActionOrder(draggedAction, item.action);
+                  setDraggedAction(null);
+                }}
+                sx={{
+                  px: 1,
+                  py: 0.8,
+                  borderRadius: 1.25,
+                  bgcolor: '#0d1017',
+                  border: draggedAction === item.action
+                    ? '1px solid rgba(115,165,255,.72)'
+                    : '1px solid rgba(82,98,134,.22)',
+                  opacity: draggedAction === item.action ? 0.55 : 1,
+                  cursor: 'grab',
+                }}
               >
-                <Typography sx={{ fontSize: 12.5, minWidth: 0, flex: 1 }}>
-                  {copy[item.labelKey]}
-                </Typography>
-                <Stack direction="row" spacing={0.5}>
-                  <IconButton
-                    size="small"
-                    disabled={index === 0}
-                    onClick={() => {
-                      if (index === 0) return;
-                      setActionOrder((current) => {
-                        const next = [...current];
-                        const tmp = next[index - 1];
-                        next[index - 1] = next[index];
-                        next[index] = tmp;
-                        return next;
-                      });
+                <Stack direction="row" spacing={1} sx={{ alignItems: 'center' }}>
+                  <Typography
+                    sx={{
+                      fontSize: 14,
+                      lineHeight: 1,
+                      color: 'text.secondary',
+                      letterSpacing: 1,
+                      flexShrink: 0,
                     }}
                   >
-                    <ChevronLeft />
-                  </IconButton>
-                  <IconButton
-                    size="small"
-                    disabled={index === orderedActionButtons.length - 1}
-                    onClick={() => {
-                      if (index >= orderedActionButtons.length - 1) return;
-                      setActionOrder((current) => {
-                        const next = [...current];
-                        const tmp = next[index + 1];
-                        next[index + 1] = next[index];
-                        next[index] = tmp;
-                        return next;
-                      });
-                    }}
-                  >
-                    <ChevronRight />
-                  </IconButton>
+                    :::
+                  </Typography>
+                  <Typography sx={{ fontSize: 12.5, minWidth: 0, flex: 1 }}>
+                    {copy[item.labelKey]}
+                  </Typography>
                 </Stack>
-              </Stack>
+              </Paper>
             ))}
           </Stack>
 
