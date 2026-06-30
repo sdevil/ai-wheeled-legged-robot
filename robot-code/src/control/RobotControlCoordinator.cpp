@@ -51,13 +51,23 @@ void updateWaltzPresentation() {
   lastWaltzPresentationMs = now;
   waltzPresentationActive = true;
 
-  const float phase = (telemetry.danceElapsedMs % 2500U) / 2500.0f;
-  const float sweep = sinf(phase * 2.0f * PI);
-  const float nod = cosf(phase * 2.0f * PI);
+  const uint32_t beatIndex = telemetry.danceElapsedMs / 1000U;
+  const uint32_t beatPhaseMs = telemetry.danceElapsedMs % 1000U;
+  const float beatPhase = beatPhaseMs / 1000.0f;
   const int cueIndex = max(0, telemetry.danceCueIndex);
+  const int beatInMeasure = beatIndex % 3U;
+  const int phraseIndex = (beatIndex / 12U) % 5U;
 
+  int cameraBase = kWaltzCameraNeutralDeg;
+  if (beatInMeasure == 0) cameraBase = 114;
+  else if (beatInMeasure == 1) cameraBase = 106;
+  else cameraBase = 98;
+  if (phraseIndex == 3) cameraBase += 4;
+  if (phraseIndex == 4) cameraBase -= 2;
+  const float cameraEase =
+      beatPhase < 0.5f ? beatPhase * 2.0f : (1.0f - beatPhase) * 2.0f;
   const int cameraTarget =
-      constrain((int)roundf(kWaltzCameraNeutralDeg + nod * 10.0f + sweep * 4.0f),
+      constrain((int)roundf(cameraBase + (cueIndex % 2 == 0 ? 2.0f : -2.0f) * cameraEase),
                 78, 128);
   cameraGimbal().setTargetAngle(cameraTarget);
 
@@ -66,11 +76,16 @@ void updateWaltzPresentation() {
       CRGB(80, 18, 130),
       CRGB(180, 80, 16),
       CRGB(22, 110, 80),
+      CRGB(160, 120, 24),
   };
-  const CRGB a = palette[cueIndex % 4];
-  const CRGB b = palette[(cueIndex + 1) % 4];
-  const float colorPhase = phase < 0.5f ? phase * 2.0f : (1.0f - phase) * 2.0f;
-  setLEDColor(lerpColor(a, b, colorPhase));
+  const CRGB base = palette[phraseIndex];
+  const CRGB accent =
+      beatInMeasure == 0 ? CRGB(180, 180, 255)
+      : beatInMeasure == 1 ? CRGB(255, 160, 100)
+                           : CRGB(80, 180, 255);
+  const float pulse =
+      beatPhase < 0.22f ? (1.0f - beatPhase / 0.22f) : 0.0f;
+  setLEDColor(lerpColor(base, accent, pulse * 0.9f));
 }
 
 void commandMotion(const MotionCommand& command, const char* trigger,

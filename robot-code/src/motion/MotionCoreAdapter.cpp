@@ -59,7 +59,7 @@ constexpr float kSearchChassisYaw = 0.025f;
 constexpr uint32_t kStandNudgeStableMs = 250;
 constexpr uint32_t kStandNudgeDurationMs = 0;
 constexpr float kStandNudgeAxis = 0.0f;
-constexpr uint32_t kDanceCueDurationMs = 2500;
+constexpr uint32_t kDanceCueDurationMs = 1000;
 constexpr uint32_t kDanceDemoDurationMs = 60000;
 constexpr uint32_t kDanceBalanceReadyMs = 450;
 
@@ -73,30 +73,75 @@ struct DanceCue {
 };
 
 constexpr DanceCue kDanceDemoCues[] = {
+    // Phrase 1: opening bow and first left/right glides.
+    {kDanceCueDurationMs, 0, 53, 0, 0, 0},
+    {kDanceCueDurationMs, -8, 56, -6, 8, 0},
+    {kDanceCueDurationMs, -4, 58, -4, 12, 0},
+    {kDanceCueDurationMs, 0, 56, 0, 0, 0},
+    {kDanceCueDurationMs, 8, 56, 6, 8, 0},
+    {kDanceCueDurationMs, 4, 58, 4, 12, 0},
     {kDanceCueDurationMs, 0, 55, 0, 0, 0},
-    {kDanceCueDurationMs, -16, 58, -9, 12, 12},
-    {kDanceCueDurationMs, 0, 54, -6, 8, 20},
-    {kDanceCueDurationMs, 18, 58, 11, 12, 28},
-    {kDanceCueDurationMs, 0, 53, 7, 8, 18},
-    {kDanceCueDurationMs, -20, 60, -12, 10, 8},
-    {kDanceCueDurationMs, 10, 55, -5, -6, 18},
-    {kDanceCueDurationMs, 24, 61, 13, 10, 34},
-    {kDanceCueDurationMs, 0, 54, 8, 6, 20},
-    {kDanceCueDurationMs, -24, 61, -13, 10, 8},
-    {kDanceCueDurationMs, -8, 55, 5, -8, 18},
-    {kDanceCueDurationMs, 18, 57, 9, 10, 26},
-    {kDanceCueDurationMs, -18, 57, -9, 10, 10},
-    {kDanceCueDurationMs, 0, 52, 0, 0, 0},
-    {kDanceCueDurationMs, -26, 62, -14, 14, 10},
-    {kDanceCueDurationMs, 0, 56, -7, 10, 18},
-    {kDanceCueDurationMs, 26, 62, 14, 14, 34},
-    {kDanceCueDurationMs, 0, 56, 7, 10, 20},
-    {kDanceCueDurationMs, -14, 58, -8, 6, 8},
-    {kDanceCueDurationMs, 14, 58, 8, 6, 22},
-    {kDanceCueDurationMs, 0, 54, 0, -8, 10},
-    {kDanceCueDurationMs, -8, 52, -4, -10, 40},
-    {kDanceCueDurationMs, 8, 50, 4, -8, 78},
-    {kDanceCueDurationMs, 0, 46, 0, 0, 105},
+    {kDanceCueDurationMs, -10, 57, -8, -6, 0},
+    {kDanceCueDurationMs, -6, 59, -6, -10, 0},
+    {kDanceCueDurationMs, 0, 55, 0, 0, 0},
+    {kDanceCueDurationMs, 10, 57, 8, -6, 0},
+    {kDanceCueDurationMs, 6, 59, 6, -10, 0},
+
+    // Phrase 2: broader travel arcs.
+    {kDanceCueDurationMs, 0, 54, 0, 0, 0},
+    {kDanceCueDurationMs, -12, 58, -10, 10, 0},
+    {kDanceCueDurationMs, -8, 60, -8, 16, 0},
+    {kDanceCueDurationMs, 0, 56, 0, 0, 0},
+    {kDanceCueDurationMs, 12, 58, 10, 10, 0},
+    {kDanceCueDurationMs, 8, 60, 8, 16, 0},
+    {kDanceCueDurationMs, 0, 54, 0, 0, 0},
+    {kDanceCueDurationMs, -12, 58, -10, -8, 0},
+    {kDanceCueDurationMs, -8, 60, -8, -14, 0},
+    {kDanceCueDurationMs, 0, 56, 0, 0, 0},
+    {kDanceCueDurationMs, 12, 58, 10, -8, 0},
+    {kDanceCueDurationMs, 8, 60, 8, -14, 0},
+
+    // Phrase 3: elegant center rise and lighter passing steps.
+    {kDanceCueDurationMs, 0, 57, 0, 0, 0},
+    {kDanceCueDurationMs, -8, 60, -6, 6, 0},
+    {kDanceCueDurationMs, 0, 61, -2, 10, 0},
+    {kDanceCueDurationMs, 0, 57, 0, 0, 0},
+    {kDanceCueDurationMs, 8, 60, 6, 6, 0},
+    {kDanceCueDurationMs, 0, 61, 2, 10, 0},
+    {kDanceCueDurationMs, 0, 56, 0, 0, 0},
+    {kDanceCueDurationMs, -10, 58, -8, -4, 0},
+    {kDanceCueDurationMs, -2, 59, -4, -8, 0},
+    {kDanceCueDurationMs, 0, 56, 0, 0, 0},
+    {kDanceCueDurationMs, 10, 58, 8, -4, 0},
+    {kDanceCueDurationMs, 2, 59, 4, -8, 0},
+
+    // Phrase 4: showier promenade section.
+    {kDanceCueDurationMs, 0, 55, 0, 0, 12},
+    {kDanceCueDurationMs, -14, 59, -10, 12, 18},
+    {kDanceCueDurationMs, -8, 61, -8, 18, 24},
+    {kDanceCueDurationMs, 0, 56, 0, 0, 16},
+    {kDanceCueDurationMs, 14, 59, 10, 12, 18},
+    {kDanceCueDurationMs, 8, 61, 8, 18, 24},
+    {kDanceCueDurationMs, 0, 55, 0, 0, 12},
+    {kDanceCueDurationMs, -14, 59, -10, -10, 12},
+    {kDanceCueDurationMs, -8, 61, -8, -16, 18},
+    {kDanceCueDurationMs, 0, 56, 0, 0, 16},
+    {kDanceCueDurationMs, 14, 59, 10, -10, 12},
+    {kDanceCueDurationMs, 8, 61, 8, -16, 18},
+
+    // Phrase 5: finale with guard curtain call.
+    {kDanceCueDurationMs, 0, 54, 0, 0, 0},
+    {kDanceCueDurationMs, -10, 57, -6, 8, 18},
+    {kDanceCueDurationMs, 10, 57, 6, 8, 32},
+    {kDanceCueDurationMs, 0, 55, 0, 0, 24},
+    {kDanceCueDurationMs, -8, 56, -4, -6, 36},
+    {kDanceCueDurationMs, 8, 56, 4, -6, 52},
+    {kDanceCueDurationMs, 0, 52, 0, 0, 70},
+    {kDanceCueDurationMs, 0, 50, 0, 0, 92},
+    {kDanceCueDurationMs, 0, 48, 0, 0, 110},
+    {kDanceCueDurationMs, 0, 46, 0, 0, 96},
+    {kDanceCueDurationMs, 0, 50, 0, 0, 42},
+    {kDanceCueDurationMs, 0, 55, 0, 0, 0},
 };
 
 struct TrackingTuning {
