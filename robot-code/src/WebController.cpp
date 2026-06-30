@@ -17,14 +17,13 @@
 #include "SerialParser.h"
 #include "VoltageMonitor.h"
 #include "camera/CameraGimbalController.h"
+#include "control/RobotControlCoordinator.h"
 #include "generated/WebUiBundle.h"
 #include "motion/MotionCoreAdapter.h"
 
 extern float pid_cam_p;
 extern float pid_cam_d;
 extern int yaw_align_threshold;
-extern bool trace_mode;
-
 namespace {
 constexpr char WIFI_SSID[] = "sdevil-WRobot";
 constexpr char WIFI_PASSWORD[] = "wrobot123";
@@ -745,7 +744,7 @@ void sendJsonStatus() {
   cameraActiveResolution = statusCameraActiveResolution;
   cameraDetectCount = statusCameraDetectCount;
   lastEvent = statusLastEvent;
-  activeMode = trace_mode ? "track_mode" : "";
+  activeMode = isTrackModeActive() ? "track_mode" : "";
   unlockStatus();
 
   const unsigned long cameraStatusAgeMs =
