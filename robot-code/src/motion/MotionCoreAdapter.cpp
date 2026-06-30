@@ -62,6 +62,7 @@ constexpr float kStandNudgeAxis = 0.0f;
 constexpr uint32_t kDanceCueDurationMs = 1000;
 constexpr uint32_t kDanceDemoDurationMs = 60000;
 constexpr uint32_t kDanceBalanceReadyMs = 450;
+constexpr uint32_t kDanceStandTriggerMs = 6000;
 
 struct DanceCue {
   uint16_t durationMs;
@@ -73,75 +74,75 @@ struct DanceCue {
 };
 
 constexpr DanceCue kDanceDemoCues[] = {
-    // Measures 1-4: opening bow, rise, first elegant glides.
-    {kDanceCueDurationMs, 0, 46, 0, 0, 0},
-    {kDanceCueDurationMs, -10, 50, -6, 4, 0},
-    {kDanceCueDurationMs, 0, 56, -3, 8, 0},
-    {kDanceCueDurationMs, 0, 54, 0, 0, 0},
-    {kDanceCueDurationMs, 12, 58, 9, 10, 0},
-    {kDanceCueDurationMs, 6, 62, 6, 16, 0},
-    {kDanceCueDurationMs, 0, 55, 0, 0, 0},
-    {kDanceCueDurationMs, -14, 58, -11, -8, 0},
-    {kDanceCueDurationMs, -8, 62, -8, -14, 0},
-    {kDanceCueDurationMs, 0, 55, 0, 0, 0},
-    {kDanceCueDurationMs, 14, 58, 11, -8, 0},
-    {kDanceCueDurationMs, 8, 62, 8, -14, 0},
+    // 0:00 - 0:12 Awakening
+    {kDanceCueDurationMs,   0, 46,   0,   0,  0},   // 00
+    {kDanceCueDurationMs,   0, 46,   0,   0,  0},   // 01
+    {kDanceCueDurationMs,   0, 46,   0,   0,  0},   // 02
+    {kDanceCueDurationMs,   0, 46,   0,   0,  0},   // 03
+    {kDanceCueDurationMs,   0, 46,   0,   0,  0},   // 04
+    {kDanceCueDurationMs,   0, 46,   0,   0,  0},   // 05
+    {kDanceCueDurationMs,   0, 55,   0,   0,  0},   // 06 stand starts
+    {kDanceCueDurationMs,   0, 55,   0,   0,  0},   // 07
+    {kDanceCueDurationMs,   0, 55,   0,   0, 20},   // 08
+    {kDanceCueDurationMs,   0, 57,   0,   0, 20},   // 09
+    {kDanceCueDurationMs,   0, 58,   0,   0, 20},   // 10
+    {kDanceCueDurationMs,   0, 55,   0,   0, 20},   // 11
 
-    // Measures 5-8: pronounced left/right side-glide feeling.
-    {kDanceCueDurationMs, 0, 54, 0, 0, 6},
-    {kDanceCueDurationMs, -18, 58, -14, 12, 10},
-    {kDanceCueDurationMs, -10, 63, -10, 20, 14},
-    {kDanceCueDurationMs, 0, 56, 0, 0, 8},
-    {kDanceCueDurationMs, 18, 58, 14, 12, 12},
-    {kDanceCueDurationMs, 10, 63, 10, 20, 16},
-    {kDanceCueDurationMs, 0, 54, 0, 0, 8},
-    {kDanceCueDurationMs, -18, 58, -14, -12, 10},
-    {kDanceCueDurationMs, -10, 63, -10, -20, 14},
-    {kDanceCueDurationMs, 0, 56, 0, 0, 8},
-    {kDanceCueDurationMs, 18, 58, 14, -12, 12},
-    {kDanceCueDurationMs, 10, 63, 10, -20, 16},
+    // 0:12 - 0:24 First waltz breath
+    {kDanceCueDurationMs,   0, 62,   0,   0, 20},   // 12
+    {kDanceCueDurationMs,   0, 54,   0,   0, 20},   // 13
+    {kDanceCueDurationMs,   0, 54,   0,   0, 20},   // 14
+    {kDanceCueDurationMs, -18, 54,   0,   0, 20},   // 15
+    {kDanceCueDurationMs, -12, 52,   0,   0, 20},   // 16
+    {kDanceCueDurationMs,   0, 52,   0,   0, 20},   // 17
+    {kDanceCueDurationMs,  18, 58,   0,   0, 20},   // 18
+    {kDanceCueDurationMs,   8, 55,   0,   0, 20},   // 19
+    {kDanceCueDurationMs,   0, 55,   0,   0, 20},   // 20
+    {kDanceCueDurationMs,   0, 55,   0,   0, 20},   // 21
+    {kDanceCueDurationMs,   0, 55,   0,   0, 25},   // 22
+    {kDanceCueDurationMs,   0, 55,   0,   0, 25},   // 23
 
-    // Measures 9-12: promenade arcs with softer travel and taller rise.
-    {kDanceCueDurationMs, 0, 58, 0, 0, 18},
-    {kDanceCueDurationMs, -12, 62, -9, 8, 24},
-    {kDanceCueDurationMs, 0, 66, -4, 14, 30},
-    {kDanceCueDurationMs, 0, 58, 0, 0, 18},
-    {kDanceCueDurationMs, 12, 62, 9, 8, 24},
-    {kDanceCueDurationMs, 0, 66, 4, 14, 30},
-    {kDanceCueDurationMs, 0, 57, 0, 0, 16},
-    {kDanceCueDurationMs, -12, 61, -9, -6, 22},
-    {kDanceCueDurationMs, 0, 65, -4, -12, 28},
-    {kDanceCueDurationMs, 0, 57, 0, 0, 16},
-    {kDanceCueDurationMs, 12, 61, 9, -6, 22},
-    {kDanceCueDurationMs, 0, 65, 4, -12, 28},
+    // 0:24 - 0:36 Promenade glide
+    {kDanceCueDurationMs,   0, 60,   8,  18, 25},   // 24
+    {kDanceCueDurationMs,   0, 60,   6,  16, 25},   // 25
+    {kDanceCueDurationMs,   0, 56,   4,  12, 25},   // 26
+    {kDanceCueDurationMs, -15, 55, -16,  10, 25},   // 27
+    {kDanceCueDurationMs, -10, 55, -12,   8, 25},   // 28
+    {kDanceCueDurationMs,  -5, 55,  -8,   6, 25},   // 29
+    {kDanceCueDurationMs,  15, 54,  16,   8, 25},   // 30
+    {kDanceCueDurationMs,  10, 53,  12,   6, 25},   // 31
+    {kDanceCueDurationMs,   5, 53,   8,   4, 25},   // 32
+    {kDanceCueDurationMs,   0, 61,  -8,   0, 25},   // 33
+    {kDanceCueDurationMs,   0, 60,  -4,   0, 25},   // 34
+    {kDanceCueDurationMs,   0, 60,   0,   0, 25},   // 35
 
-    // Measures 13-16: alternating glide and center sweep, more theatrical.
-    {kDanceCueDurationMs, 0, 55, 0, 0, 12},
-    {kDanceCueDurationMs, -20, 60, -15, 14, 18},
-    {kDanceCueDurationMs, 4, 64, -6, 22, 26},
-    {kDanceCueDurationMs, 0, 56, 0, 0, 14},
-    {kDanceCueDurationMs, 20, 60, 15, 14, 18},
-    {kDanceCueDurationMs, -4, 64, 6, 22, 26},
-    {kDanceCueDurationMs, 0, 55, 0, 0, 12},
-    {kDanceCueDurationMs, -20, 60, -15, -14, 16},
-    {kDanceCueDurationMs, 4, 64, -6, -22, 24},
-    {kDanceCueDurationMs, 0, 56, 0, 0, 14},
-    {kDanceCueDurationMs, 20, 60, 15, -14, 16},
-    {kDanceCueDurationMs, -4, 64, 6, -22, 24},
+    // 0:36 - 0:48 Waltz turn and sway
+    {kDanceCueDurationMs, -10, 62, -36,   6, 25},   // 36
+    {kDanceCueDurationMs, -20, 58, -32,   4, 25},   // 37
+    {kDanceCueDurationMs, -12, 58, -22,   2, 25},   // 38
+    {kDanceCueDurationMs,  10, 54,  36,   4, 25},   // 39
+    {kDanceCueDurationMs,  20, 54,  32,   2, 25},   // 40
+    {kDanceCueDurationMs,  10, 54,  20,   0, 25},   // 41
+    {kDanceCueDurationMs,   0, 60,   8,  14, 25},   // 42
+    {kDanceCueDurationMs,  -8, 58, -12,  10, 25},   // 43
+    {kDanceCueDurationMs,   0, 58,   0,   4, 25},   // 44
+    {kDanceCueDurationMs,   0, 55,  10,   0, 25},   // 45
+    {kDanceCueDurationMs,   0, 55,   0,   0, 25},   // 46
+    {kDanceCueDurationMs,   0, 55,   0,   0, 25},   // 47
 
-    // Measures 17-20: finale, slowing travel, guard curtain call.
-    {kDanceCueDurationMs, 0, 54, 0, 0, 18},
-    {kDanceCueDurationMs, -12, 58, -8, 8, 26},
-    {kDanceCueDurationMs, 12, 60, 8, 8, 34},
-    {kDanceCueDurationMs, 0, 54, 0, 0, 42},
-    {kDanceCueDurationMs, -8, 56, -5, -6, 58},
-    {kDanceCueDurationMs, 8, 56, 5, -6, 74},
-    {kDanceCueDurationMs, 0, 50, 0, 0, 92},
-    {kDanceCueDurationMs, 0, 46, 0, 0, 112},
-    {kDanceCueDurationMs, 0, 44, 0, 0, 120},
-    {kDanceCueDurationMs, 0, 46, 0, 0, 108},
-    {kDanceCueDurationMs, 0, 50, 0, 0, 56},
-    {kDanceCueDurationMs, 0, 55, 0, 0, 0},
+    // 0:48 - 1:00 Pivot flourish and presentation
+    {kDanceCueDurationMs,   0, 64,   0,   0, 25},   // 48
+    {kDanceCueDurationMs,   0, 64, -55,   0, 25},   // 49 pivot left
+    {kDanceCueDurationMs,   0, 64,  55,   0, 25},   // 50 pivot right
+    {kDanceCueDurationMs,   0, 58, -78,   0, 25},   // 51 showcase spin
+    {kDanceCueDurationMs,   0, 58, -26,   0, 25},   // 52 settle
+    {kDanceCueDurationMs,   0, 58,  24,   0, 25},   // 53 face front
+    {kDanceCueDurationMs,   0, 60,   4,  10, 45},   // 54 toe-lift illusion + guard
+    {kDanceCueDurationMs,   0, 53,   0,   0, 45},   // 55
+    {kDanceCueDurationMs,   0, 53,   0,   0, 45},   // 56 bow
+    {kDanceCueDurationMs,   0, 60,   0,   0, 45},   // 57
+    {kDanceCueDurationMs,   0, 58,   0,   0, 25},   // 58
+    {kDanceCueDurationMs,   0, 57,   0,   0, 25},   // 59 final pose
 };
 
 struct TrackingTuning {
@@ -737,21 +738,16 @@ void MotionCoreAdapter::startDanceDemo(uint32_t now) {
 
   danceDemoQueued_ = true;
   danceDemoActive_ = false;
+  danceStandTriggered_ = false;
   danceDemoStartedMs_ = 0;
   danceBalanceReadySinceMs_ = 0;
   danceCueIndex_ = -1;
-
-  if (ctrl.fsm_state_machine.mode != fsm::mode_state::BALANCE) {
-    armDefaultStandPose();
-    pulseButton(BTN_RB, 120);
-  } else {
-    danceBalanceReadySinceMs_ = now;
-  }
 }
 
 void MotionCoreAdapter::stopDanceDemo(bool restoreNeutralPose) {
   danceDemoQueued_ = false;
   danceDemoActive_ = false;
+  danceStandTriggered_ = false;
   danceDemoStartedMs_ = 0;
   danceBalanceReadySinceMs_ = 0;
   danceCueIndex_ = -1;
@@ -785,15 +781,6 @@ void MotionCoreAdapter::updateDanceDemo(uint32_t now) {
   }
 
   if (!danceDemoActive_) {
-    if (ctrl.fsm_state_machine.mode != fsm::mode_state::BALANCE) {
-      danceBalanceReadySinceMs_ = 0;
-      return;
-    }
-    if (danceBalanceReadySinceMs_ == 0) {
-      danceBalanceReadySinceMs_ = now;
-      return;
-    }
-    if (now - danceBalanceReadySinceMs_ < kDanceBalanceReadyMs) return;
     danceDemoQueued_ = false;
     danceDemoActive_ = true;
     danceDemoStartedMs_ = now;
@@ -806,12 +793,40 @@ void MotionCoreAdapter::updateDanceDemo(uint32_t now) {
     return;
   }
 
+  if (!danceStandTriggered_ && elapsedMs >= kDanceStandTriggerMs) {
+    danceStandTriggered_ = true;
+    armDefaultStandPose();
+    pulseButton(BTN_RB, 120);
+    danceBalanceReadySinceMs_ = 0;
+  }
+
   const int cueCount = sizeof(kDanceDemoCues) / sizeof(kDanceDemoCues[0]);
   const int cueIndex =
       min((int)(elapsedMs / kDanceCueDurationMs), cueCount - 1);
   if (cueIndex != danceCueIndex_) {
     danceCueIndex_ = cueIndex;
     applyDanceCue(cueIndex);
+  }
+
+  if (!danceStandTriggered_) {
+    stopMove();
+    return;
+  }
+
+  if (ctrl.fsm_state_machine.mode != fsm::mode_state::BALANCE) {
+    stopMove();
+    danceBalanceReadySinceMs_ = 0;
+    return;
+  }
+
+  if (danceBalanceReadySinceMs_ == 0) {
+    danceBalanceReadySinceMs_ = now;
+    stopMove();
+    return;
+  }
+
+  if (now - danceBalanceReadySinceMs_ < kDanceBalanceReadyMs) {
+    stopMove();
   }
 }
 

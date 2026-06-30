@@ -19,6 +19,8 @@ constexpr uint8_t kModeLedOnLevel = HIGH;
 constexpr uint8_t kModeLedOffLevel = LOW;
 constexpr uint32_t kWaltzPresentationFrameMs = 40;
 constexpr int kWaltzCameraNeutralDeg = 105;
+constexpr int kWaltzCameraUpMaxDeg = 119;
+constexpr int kWaltzCameraDownMaxDeg = 93;
 
 bool trackModeActive = false;
 
@@ -31,6 +33,37 @@ CRGB lerpColor(const CRGB& a, const CRGB& b, float t) {
       (uint8_t)roundf(a.r + (b.r - a.r) * t),
       (uint8_t)roundf(a.g + (b.g - a.g) * t),
       (uint8_t)roundf(a.b + (b.b - a.b) * t));
+}
+
+float easeInOutSine(float t) {
+  t = constrain(t, 0.0f, 1.0f);
+  return 0.5f - 0.5f * cosf(t * PI);
+}
+
+float interpolateKeyframes(const uint16_t* timesMs, const int* values,
+                           size_t count, uint32_t timeMs) {
+  if (count == 0) return 0.0f;
+  if (timeMs <= timesMs[0]) return (float)values[0];
+  for (size_t i = 1; i < count; ++i) {
+    if (timeMs <= timesMs[i]) {
+      const uint32_t span = max<uint32_t>(1, timesMs[i] - timesMs[i - 1]);
+      const float t = easeInOutSine((float)(timeMs - timesMs[i - 1]) / (float)span);
+      return values[i - 1] + (values[i] - values[i - 1]) * t;
+    }
+  }
+  return (float)values[count - 1];
+}
+
+CRGB colorForWaltzTime(uint32_t elapsedMs) {
+  if (elapsedMs < 12000U) {
+    return lerpColor(CRGB(36, 16, 4), CRGB(84, 48, 14),
+                     constrain((float)elapsedMs / 12000.0f, 0.0f, 1.0f));
+  }
+  if (elapsedMs < 24000U) return CRGB(148, 110, 36);
+  if (elapsedMs < 36000U) return CRGB(90, 118, 190);
+  if (elapsedMs < 48000U) return CRGB(60, 88, 178);
+  if (elapsedMs < 54000U) return CRGB(172, 136, 44);
+  return CRGB(30, 54, 150);
 }
 
 void updateWaltzPresentation() {
@@ -51,41 +84,40 @@ void updateWaltzPresentation() {
   lastWaltzPresentationMs = now;
   waltzPresentationActive = true;
 
-  const uint32_t beatIndex = telemetry.danceElapsedMs / 1000U;
-  const uint32_t beatPhaseMs = telemetry.danceElapsedMs % 1000U;
-  const float beatPhase = beatPhaseMs / 1000.0f;
-  const int cueIndex = max(0, telemetry.danceCueIndex);
-  const int beatInMeasure = beatIndex % 3U;
-  const int phraseIndex = (beatIndex / 12U) % 5U;
-
-  int cameraBase = kWaltzCameraNeutralDeg;
-  if (beatInMeasure == 0) cameraBase = 114;
-  else if (beatInMeasure == 1) cameraBase = 106;
-  else cameraBase = 98;
-  if (phraseIndex == 3) cameraBase += 4;
-  if (phraseIndex == 4) cameraBase -= 2;
-  const float cameraEase =
-      beatPhase < 0.5f ? beatPhase * 2.0f : (1.0f - beatPhase) * 2.0f;
-  const int cameraTarget =
-      constrain((int)roundf(cameraBase + (cueIndex % 2 == 0 ? 2.0f : -2.0f) * cameraEase),
-                78, 128);
+  const uint32_t delayedMs =
+      telemetry.danceElapsedMs > 300U ? telemetry.danceElapsedMs - 300U : 0U;
+  static const uint16_t kHeadTimesMs[] = {
+      0, 3000, 5000, 6000, 8000, 11000,
+      14000, 17000, 20000, 23000,
+      25000, 29000, 32000, 35000,
+      38000, 41000, 44000, 47000,
+      50000, 53000, 56000, 57000, 59000, 60000
+  };
+  static const int kHeadAnglesDeg[] = {
+      -12, -4, -4, 3, 3, 0,
+      6, 0, -4, 4,
+      0, 7, -4, 8,
+      6, 0, -5, 9,
+      10, 0, -8, 6, 0, 0
+  };
+  const int cameraTarget = constrain(
+      (int)roundf(kWaltzCameraNeutralDeg +
+                  interpolateKeyframes(kHeadTimesMs, kHeadAnglesDeg,
+                                       sizeof(kHeadTimesMs) / sizeof(kHeadTimesMs[0]),
+                                       delayedMs)),
+      kWaltzCameraDownMaxDeg, kWaltzCameraUpMaxDeg);
   cameraGimbal().setTargetAngle(cameraTarget);
 
-  const CRGB palette[] = {
-      CRGB(8, 36, 120),
-      CRGB(80, 18, 130),
-      CRGB(180, 80, 16),
-      CRGB(22, 110, 80),
-      CRGB(160, 120, 24),
-  };
-  const CRGB base = palette[phraseIndex];
+  const uint32_t beatPhaseMs = telemetry.danceElapsedMs % 1000U;
+  const float beatPhase = beatPhaseMs / 1000.0f;
+  const CRGB base = colorForWaltzTime(telemetry.danceElapsedMs);
   const CRGB accent =
-      beatInMeasure == 0 ? CRGB(180, 180, 255)
-      : beatInMeasure == 1 ? CRGB(255, 160, 100)
-                           : CRGB(80, 180, 255);
-  const float pulse =
-      beatPhase < 0.22f ? (1.0f - beatPhase / 0.22f) : 0.0f;
-  setLEDColor(lerpColor(base, accent, pulse * 0.9f));
+      telemetry.danceElapsedMs < 12000U ? CRGB(150, 110, 50)
+      : telemetry.danceElapsedMs < 24000U ? CRGB(220, 180, 96)
+      : telemetry.danceElapsedMs < 48000U ? CRGB(120, 180, 255)
+      : CRGB(255, 204, 100);
+  const float pulse = beatPhase < 0.24f ? (1.0f - beatPhase / 0.24f) : 0.0f;
+  setLEDColor(lerpColor(base, accent, pulse * 0.82f));
 }
 
 void commandMotion(const MotionCommand& command, const char* trigger,

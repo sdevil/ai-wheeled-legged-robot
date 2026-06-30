@@ -94,6 +94,7 @@ class MotionCoreAdapter final : public MotionCore {
   bool standNudgePending_ = false;
   bool danceDemoQueued_ = false;
   bool danceDemoActive_ = false;
+  bool danceStandTriggered_ = false;
   float legHeightBaseTarget_ = 0.0f;
   uint32_t lastLegHeightUpdateMs_ = 0;
   uint32_t legHeightForceSyncHoldUntilMs_ = 0;
