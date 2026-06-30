@@ -335,6 +335,7 @@ export default function App() {
   const [settingsMessage, setSettingsMessage] = useState('');
   const [actionOrder, setActionOrder] = useState<string[]>(loadActionOrder);
   const [draggedAction, setDraggedAction] = useState<string | null>(null);
+  const [actionOrderExpanded, setActionOrderExpanded] = useState(false);
   const [driveSpeed, setDriveSpeed] = useState(100);
   const gimbalSpeed = 100;
   const [guardAngle, setGuardAngle] = useState(0);
@@ -1041,56 +1042,89 @@ export default function App() {
             <MenuItem value="gamepad">Gamepad / Bluetooth</MenuItem>
           </TextField>
 
-          <Typography color="text.secondary" sx={{ fontSize: 12, fontWeight: 700 }}>
-            {copy.actionOrder}
-          </Typography>
-          <Stack spacing={0.6}>
-            {orderedActionButtons.map((item) => (
-              <Paper
-                key={item.action}
-                draggable
-                onDragStart={() => setDraggedAction(item.action)}
-                onDragEnd={() => setDraggedAction(null)}
-                onDragOver={(event) => {
-                  event.preventDefault();
-                  event.dataTransfer.dropEffect = 'move';
-                }}
-                onDrop={(event) => {
-                  event.preventDefault();
-                  if (draggedAction) moveActionOrder(draggedAction, item.action);
-                  setDraggedAction(null);
-                }}
+          <Paper
+            variant="outlined"
+            sx={{
+              borderRadius: 1.5,
+              borderColor: 'rgba(82,98,134,.22)',
+              bgcolor: '#0d1017',
+              overflow: 'hidden',
+            }}
+          >
+            <Button
+              fullWidth
+              onClick={() => setActionOrderExpanded((current) => !current)}
+              sx={{
+                px: 1.2,
+                py: 1,
+                minHeight: 0,
+                color: 'text.primary',
+                justifyContent: 'space-between',
+                textTransform: 'none',
+                borderRadius: 0,
+              }}
+            >
+              <Typography color="text.secondary" sx={{ fontSize: 12, fontWeight: 700 }}>
+                {copy.actionOrder}
+              </Typography>
+              <KeyboardArrowDown
                 sx={{
-                  px: 1,
-                  py: 0.8,
-                  borderRadius: 1.25,
-                  bgcolor: '#0d1017',
-                  border: draggedAction === item.action
-                    ? '1px solid rgba(115,165,255,.72)'
-                    : '1px solid rgba(82,98,134,.22)',
-                  opacity: draggedAction === item.action ? 0.55 : 1,
-                  cursor: 'grab',
+                  fontSize: 18,
+                  transform: actionOrderExpanded ? 'rotate(180deg)' : 'rotate(0deg)',
+                  transition: 'transform .18s ease',
                 }}
-              >
-                <Stack direction="row" spacing={1} sx={{ alignItems: 'center' }}>
-                  <Typography
+              />
+            </Button>
+            {actionOrderExpanded ? (
+              <Stack spacing={0.6} sx={{ px: 1, pb: 1 }}>
+                {orderedActionButtons.map((item) => (
+                  <Paper
+                    key={item.action}
+                    draggable
+                    onDragStart={() => setDraggedAction(item.action)}
+                    onDragEnd={() => setDraggedAction(null)}
+                    onDragOver={(event) => {
+                      event.preventDefault();
+                      event.dataTransfer.dropEffect = 'move';
+                    }}
+                    onDrop={(event) => {
+                      event.preventDefault();
+                      if (draggedAction) moveActionOrder(draggedAction, item.action);
+                      setDraggedAction(null);
+                    }}
                     sx={{
-                      fontSize: 14,
-                      lineHeight: 1,
-                      color: 'text.secondary',
-                      letterSpacing: 1,
-                      flexShrink: 0,
+                      px: 1,
+                      py: 0.8,
+                      borderRadius: 1.25,
+                      bgcolor: '#111521',
+                      border: draggedAction === item.action
+                        ? '1px solid rgba(115,165,255,.72)'
+                        : '1px solid rgba(82,98,134,.22)',
+                      opacity: draggedAction === item.action ? 0.55 : 1,
+                      cursor: 'grab',
                     }}
                   >
-                    :::
-                  </Typography>
-                  <Typography sx={{ fontSize: 12.5, minWidth: 0, flex: 1 }}>
-                    {copy[item.labelKey]}
-                  </Typography>
-                </Stack>
-              </Paper>
-            ))}
-          </Stack>
+                    <Stack direction="row" spacing={1} sx={{ alignItems: 'center' }}>
+                      <Typography
+                        sx={{
+                          fontSize: 14,
+                          lineHeight: 1,
+                          color: 'text.secondary',
+                          letterSpacing: 1,
+                          flexShrink: 0,
+                        }}
+                      >
+                        :::
+                      </Typography>
+                      <Typography sx={{ fontSize: 12.5, minWidth: 0, flex: 1 }}>
+                        {copy[item.labelKey]}
+                      </Typography>
+                    </Stack>
+                  </Paper>
+                ))}
+              </Stack>
+            ) : null}
+          </Paper>
 
           {controlMode === 'gamepad' ? (
             <TextField
