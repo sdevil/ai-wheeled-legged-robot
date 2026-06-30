@@ -73,6 +73,9 @@ struct MotionTelemetry {
   float standRecoverMaxSignedDisplacementM = 0.0f;
   uint32_t standRecoverPeakTimeMs = 0;
   float standRecoverCorrectionMps = 0.0f;
+  bool danceActive = false;
+  uint32_t danceElapsedMs = 0;
+  int danceCueIndex = -1;
   const char* mode = "boot";
   const char* core = "unknown";
 };

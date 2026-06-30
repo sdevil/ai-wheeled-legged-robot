@@ -56,8 +56,8 @@ const char* webActionName(WebRobotAction action) {
     case WebRobotAction::ResetPose: return "reset";
     case WebRobotAction::CancelKick: return "cancel";
     case WebRobotAction::TrackMode: return "track_mode";
-    case WebRobotAction::DanceDemo: return "dance_demo";
-    case WebRobotAction::StopDanceDemo: return "dance_demo_stop";
+    case WebRobotAction::DanceDemo: return "waltz_show";
+    case WebRobotAction::StopDanceDemo: return "waltz_stop";
     case WebRobotAction::LedTest: return "led_test";
     case WebRobotAction::Jump: return "jump_place";
     case WebRobotAction::JumpForward: return "jump_forward";

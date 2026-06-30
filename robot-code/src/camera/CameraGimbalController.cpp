@@ -78,6 +78,13 @@ void CameraGimbalController::pitchDelta(int deltaDeg) {
                          (float)kCameraMaxDeg);
 }
 
+void CameraGimbalController::setTargetAngle(int angleDeg) {
+  if (calibrationActive_) return;
+  targetDeg_ = constrain((float)angleDeg,
+                         (float)kCameraMinDeg,
+                         (float)kCameraMaxDeg);
+}
+
 
 void CameraGimbalController::trackVertical(int normalizedErrorY, bool locked,
                                            int confidence) {

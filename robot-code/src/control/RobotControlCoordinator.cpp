@@ -17,8 +17,61 @@ constexpr unsigned long kWebZeroDebounceMs = 70;
 constexpr unsigned long kControlModeLedSyncMs = 250;
 constexpr uint8_t kModeLedOnLevel = HIGH;
 constexpr uint8_t kModeLedOffLevel = LOW;
+constexpr uint32_t kWaltzPresentationFrameMs = 40;
+constexpr int kWaltzCameraNeutralDeg = 105;
 
 bool trackModeActive = false;
+
+bool waltzPresentationActive = false;
+uint32_t lastWaltzPresentationMs = 0;
+
+CRGB lerpColor(const CRGB& a, const CRGB& b, float t) {
+  t = constrain(t, 0.0f, 1.0f);
+  return CRGB(
+      (uint8_t)roundf(a.r + (b.r - a.r) * t),
+      (uint8_t)roundf(a.g + (b.g - a.g) * t),
+      (uint8_t)roundf(a.b + (b.b - a.b) * t));
+}
+
+void updateWaltzPresentation() {
+  const MotionTelemetry telemetry = motionCore().telemetry();
+  const bool active = strcmp(telemetry.mode, "dance_demo") == 0;
+  if (!active) {
+    if (waltzPresentationActive) {
+      waltzPresentationActive = false;
+      lastWaltzPresentationMs = 0;
+      stopLEDBlink();
+      cameraGimbal().setTargetAngle(kWaltzCameraNeutralDeg);
+    }
+    return;
+  }
+
+  const uint32_t now = millis();
+  if (now - lastWaltzPresentationMs < kWaltzPresentationFrameMs) return;
+  lastWaltzPresentationMs = now;
+  waltzPresentationActive = true;
+
+  const float phase = (telemetry.danceElapsedMs % 2500U) / 2500.0f;
+  const float sweep = sinf(phase * 2.0f * PI);
+  const float nod = cosf(phase * 2.0f * PI);
+  const int cueIndex = max(0, telemetry.danceCueIndex);
+
+  const int cameraTarget =
+      constrain((int)roundf(kWaltzCameraNeutralDeg + nod * 10.0f + sweep * 4.0f),
+                78, 128);
+  cameraGimbal().setTargetAngle(cameraTarget);
+
+  const CRGB palette[] = {
+      CRGB(8, 36, 120),
+      CRGB(80, 18, 130),
+      CRGB(180, 80, 16),
+      CRGB(22, 110, 80),
+  };
+  const CRGB a = palette[cueIndex % 4];
+  const CRGB b = palette[(cueIndex + 1) % 4];
+  const float colorPhase = phase < 0.5f ? phase * 2.0f : (1.0f - phase) * 2.0f;
+  setLEDColor(lerpColor(a, b, colorPhase));
+}
 
 void commandMotion(const MotionCommand& command, const char* trigger,
                    bool event = false) {
@@ -37,8 +90,8 @@ const char* webActionName(WebRobotAction action) {
     case WebRobotAction::ResetPose: return "reset";
     case WebRobotAction::CancelKick: return "cancel";
     case WebRobotAction::TrackMode: return "track_mode";
-    case WebRobotAction::DanceDemo: return "dance_demo";
-    case WebRobotAction::StopDanceDemo: return "dance_demo_stop";
+    case WebRobotAction::DanceDemo: return "waltz_show";
+    case WebRobotAction::StopDanceDemo: return "waltz_stop";
     case WebRobotAction::LedTest: return "led_test";
     case WebRobotAction::Jump: return "jump_place";
     case WebRobotAction::JumpForward: return "jump_forward";
@@ -166,6 +219,7 @@ void processWebControlState(bool gamepadEnabled) {
   static unsigned long lastLegHeightPercentDispatchMs = 0;
 
   dispatchWebAction(consumeWebRobotAction());
+  updateWaltzPresentation();
   if (trackModeActive && isWebCameraScanPending() &&
       millis() - lastTrackScanRetryMs >= 1000) {
     lastTrackScanRetryMs = millis();
@@ -263,7 +317,7 @@ bool isTrackModeActive() { return trackModeActive; }
 const char* activeUiMode() {
   if (trackModeActive) return "track_mode";
   const MotionTelemetry telemetry = motionCore().telemetry();
-  if (strcmp(telemetry.mode, "dance_demo") == 0) return "dance_demo";
+  if (strcmp(telemetry.mode, "dance_demo") == 0) return "waltz_show";
   return "";
 }
 

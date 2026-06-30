@@ -56,6 +56,8 @@ export class RobotApi {
   private ws?: WebSocket;
   private wsReady = false;
   private wsConnectTimer: number | null = null;
+  private suppressCloseNotice = false;
+  private websocketClosedHandler?: () => void;
   private host: string;
   private transportMode: TransportMode;
   private requestId = 1;
@@ -76,6 +78,10 @@ export class RobotApi {
     if (mode === this.transportMode) return;
     this.transportMode = mode;
     this.disposeSocket();
+  }
+
+  onWebsocketClosed(handler: (() => void) | undefined) {
+    this.websocketClosedHandler = handler;
   }
 
   private getBaseHttp() {
@@ -163,14 +169,14 @@ export class RobotApi {
         ? 'Sitting'
         : activeMode === 'track_mode'
           ? 'Track'
-          : activeMode === 'dance_demo'
+          : activeMode === 'waltz_show'
             ? 'Waltz'
             : data.enabled
               ? 'Active'
               : 'Standby';
       const aiMode = activeMode === 'track_mode'
         ? 'Track'
-        : activeMode === 'dance_demo'
+        : activeMode === 'waltz_show'
           ? 'Waltz'
           : data.enabled
             ? 'Active'
@@ -265,6 +271,7 @@ export class RobotApi {
     try {
       const socket = new WebSocket(this.getWsUrl());
       this.ws = socket;
+      this.suppressCloseNotice = false;
       this.wsConnectTimer = window.setTimeout(() => {
         if (this.ws === socket && socket.readyState === WebSocket.CONNECTING) socket.close();
       }, 1500);
@@ -290,10 +297,18 @@ export class RobotApi {
       };
       socket.onclose = () => {
         if (this.ws !== socket) return;
+        const wasReady = this.wsReady;
+        const shouldNotify =
+          wasReady &&
+          !this.suppressCloseNotice &&
+          this.transportMode !== 'http' &&
+          document.visibilityState === 'visible';
         if (this.wsConnectTimer !== null) window.clearTimeout(this.wsConnectTimer);
         this.wsConnectTimer = null;
         this.wsReady = false;
+        this.ws = undefined;
         this.resolveAllAcks(false);
+        if (shouldNotify) this.websocketClosedHandler?.();
       };
       socket.onerror = () => {
         if (this.ws !== socket) return;
@@ -568,6 +583,7 @@ export class RobotApi {
     this.wsConnectTimer = null;
     this.resolveAllAcks(false);
     if (this.ws) {
+      this.suppressCloseNotice = true;
       this.ws.close();
       this.ws = undefined;
     }

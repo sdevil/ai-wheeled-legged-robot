@@ -19,6 +19,7 @@ class CameraGimbalController {
   void begin();
   void update();
   void pitchDelta(int deltaDeg);
+  void setTargetAngle(int angleDeg);
   void trackVertical(int normalizedErrorY, bool locked, int confidence);
   void resetPose();
   CameraGimbalTelemetry telemetry() const;

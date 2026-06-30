@@ -59,8 +59,8 @@ constexpr float kSearchChassisYaw = 0.025f;
 constexpr uint32_t kStandNudgeStableMs = 250;
 constexpr uint32_t kStandNudgeDurationMs = 0;
 constexpr float kStandNudgeAxis = 0.0f;
-constexpr uint32_t kDanceCueDurationMs = 1250;
-constexpr uint32_t kDanceDemoDurationMs = 30000;
+constexpr uint32_t kDanceCueDurationMs = 2500;
+constexpr uint32_t kDanceDemoDurationMs = 60000;
 constexpr uint32_t kDanceBalanceReadyMs = 450;
 
 struct DanceCue {
@@ -74,29 +74,29 @@ struct DanceCue {
 
 constexpr DanceCue kDanceDemoCues[] = {
     {kDanceCueDurationMs, 0, 55, 0, 0, 0},
-    {kDanceCueDurationMs, -14, 58, -6, 0, 18},
-    {kDanceCueDurationMs, 0, 52, -4, 0, 22},
-    {kDanceCueDurationMs, 20, 58, 8, 0, 30},
-    {kDanceCueDurationMs, 0, 53, 4, 0, 18},
-    {kDanceCueDurationMs, -18, 60, -8, 0, 10},
-    {kDanceCueDurationMs, 8, 54, 0, 0, 20},
-    {kDanceCueDurationMs, 26, 60, 10, 0, 32},
-    {kDanceCueDurationMs, 0, 54, 5, 0, 20},
-    {kDanceCueDurationMs, -26, 61, -10, 0, 10},
-    {kDanceCueDurationMs, 0, 54, -4, 0, 18},
-    {kDanceCueDurationMs, 16, 57, 6, 0, 24},
-    {kDanceCueDurationMs, -16, 57, -6, 0, 12},
+    {kDanceCueDurationMs, -16, 58, -9, 12, 12},
+    {kDanceCueDurationMs, 0, 54, -6, 8, 20},
+    {kDanceCueDurationMs, 18, 58, 11, 12, 28},
+    {kDanceCueDurationMs, 0, 53, 7, 8, 18},
+    {kDanceCueDurationMs, -20, 60, -12, 10, 8},
+    {kDanceCueDurationMs, 10, 55, -5, -6, 18},
+    {kDanceCueDurationMs, 24, 61, 13, 10, 34},
+    {kDanceCueDurationMs, 0, 54, 8, 6, 20},
+    {kDanceCueDurationMs, -24, 61, -13, 10, 8},
+    {kDanceCueDurationMs, -8, 55, 5, -8, 18},
+    {kDanceCueDurationMs, 18, 57, 9, 10, 26},
+    {kDanceCueDurationMs, -18, 57, -9, 10, 10},
     {kDanceCueDurationMs, 0, 52, 0, 0, 0},
-    {kDanceCueDurationMs, -24, 61, -10, 0, 10},
-    {kDanceCueDurationMs, 0, 55, -5, 0, 20},
-    {kDanceCueDurationMs, 24, 61, 10, 0, 30},
-    {kDanceCueDurationMs, 0, 55, 5, 0, 18},
-    {kDanceCueDurationMs, -12, 56, -5, 0, 8},
-    {kDanceCueDurationMs, 12, 56, 5, 0, 18},
-    {kDanceCueDurationMs, 0, 54, 0, 0, 8},
-    {kDanceCueDurationMs, 0, 50, 0, 0, 55},
-    {kDanceCueDurationMs, 0, 46, 0, 0, 95},
-    {kDanceCueDurationMs, 0, 55, 0, 0, 0},
+    {kDanceCueDurationMs, -26, 62, -14, 14, 10},
+    {kDanceCueDurationMs, 0, 56, -7, 10, 18},
+    {kDanceCueDurationMs, 26, 62, 14, 14, 34},
+    {kDanceCueDurationMs, 0, 56, 7, 10, 20},
+    {kDanceCueDurationMs, -14, 58, -8, 6, 8},
+    {kDanceCueDurationMs, 14, 58, 8, 6, 22},
+    {kDanceCueDurationMs, 0, 54, 0, -8, 10},
+    {kDanceCueDurationMs, -8, 52, -4, -10, 40},
+    {kDanceCueDurationMs, 8, 50, 4, -8, 78},
+    {kDanceCueDurationMs, 0, 46, 0, 0, 105},
 };
 
 struct TrackingTuning {
@@ -511,6 +511,10 @@ MotionTelemetry MotionCoreAdapter::telemetry() const {
   data.standRecoverMaxSignedDisplacementM = ctrl.balance_recover_max_signed_displacement;
   data.standRecoverPeakTimeMs = ctrl.balance_recover_peak_time;
   data.standRecoverCorrectionMps = ctrl.balance_recover_position_correction;
+  data.danceActive = danceDemoQueued_ || danceDemoActive_;
+  data.danceElapsedMs =
+      danceDemoActive_ ? millis() - danceDemoStartedMs_ : 0;
+  data.danceCueIndex = danceCueIndex_;
   data.mode = modeName();
   data.core = name();
   data.enabled = ctrl.fsm_state_machine.mode == fsm::mode_state::BALANCE ||
