@@ -59,6 +59,45 @@ constexpr float kSearchChassisYaw = 0.025f;
 constexpr uint32_t kStandNudgeStableMs = 250;
 constexpr uint32_t kStandNudgeDurationMs = 0;
 constexpr float kStandNudgeAxis = 0.0f;
+constexpr uint32_t kDanceCueDurationMs = 1250;
+constexpr uint32_t kDanceDemoDurationMs = 30000;
+constexpr uint32_t kDanceBalanceReadyMs = 450;
+
+struct DanceCue {
+  uint16_t durationMs;
+  int leanPercent;
+  int heightPercent;
+  int steerPercent;
+  int drivePercent;
+  int guardAngleDeg;
+};
+
+constexpr DanceCue kDanceDemoCues[] = {
+    {kDanceCueDurationMs, 0, 55, 0, 0, 0},
+    {kDanceCueDurationMs, -24, 58, -8, 0, 10},
+    {kDanceCueDurationMs, 0, 52, -4, 0, 18},
+    {kDanceCueDurationMs, 24, 58, 8, 0, 28},
+    {kDanceCueDurationMs, 0, 52, 4, 0, 18},
+    {kDanceCueDurationMs, -18, 60, -10, 0, 6},
+    {kDanceCueDurationMs, 10, 54, 0, 0, 18},
+    {kDanceCueDurationMs, 28, 60, 10, 0, 30},
+    {kDanceCueDurationMs, 0, 53, 5, 0, 18},
+    {kDanceCueDurationMs, -28, 61, -10, 0, 8},
+    {kDanceCueDurationMs, 0, 54, -4, 0, 18},
+    {kDanceCueDurationMs, 18, 57, 6, 0, 24},
+    {kDanceCueDurationMs, -18, 57, -6, 0, 12},
+    {kDanceCueDurationMs, 0, 50, 0, 0, 0},
+    {kDanceCueDurationMs, -30, 62, -12, 0, 8},
+    {kDanceCueDurationMs, 0, 55, -6, 0, 18},
+    {kDanceCueDurationMs, 30, 62, 12, 0, 28},
+    {kDanceCueDurationMs, 0, 55, 6, 0, 18},
+    {kDanceCueDurationMs, -20, 58, -8, 0, 12},
+    {kDanceCueDurationMs, 20, 58, 8, 0, 22},
+    {kDanceCueDurationMs, 0, 52, 0, 0, 10},
+    {kDanceCueDurationMs, -12, 56, -5, 0, 6},
+    {kDanceCueDurationMs, 12, 56, 5, 0, 20},
+    {kDanceCueDurationMs, 0, 55, 0, 0, 0},
+};
 
 struct TrackingTuning {
   float yawScale;
@@ -156,6 +195,7 @@ void MotionCoreAdapter::update() {
   if (!started_) return;
   const uint32_t now = millis();
   if (pulseButtons_ && deadlineReached(now, pulseUntilMs_)) pulseButtons_ = 0;
+  updateDanceDemo(now);
   if (defaultStandPosePending_ &&
       ctrl.fsm_state_machine.mode == fsm::mode_state::BALANCE) {
     defaultStandPosePending_ = false;
@@ -169,6 +209,13 @@ void MotionCoreAdapter::update() {
 }
 
 void MotionCoreAdapter::command(const MotionCommand& command) {
+  const bool isDanceCommand =
+      command.type == MotionCommandType::DanceDemoStart ||
+      command.type == MotionCommandType::DanceDemoStop;
+  if (!isDanceCommand && (danceDemoActive_ || danceDemoQueued_)) {
+    stopDanceDemo(true);
+  }
+
   switch (command.type) {
     case MotionCommandType::Stand:
       maintenance_ = false;
@@ -302,6 +349,12 @@ void MotionCoreAdapter::command(const MotionCommand& command) {
       trackProfile_ = 0;
       enterTrackingState(TrackObservationState::Idle);
       trackDecision_ = "idle";
+      break;
+    case MotionCommandType::DanceDemoStart:
+      startDanceDemo(millis());
+      break;
+    case MotionCommandType::DanceDemoStop:
+      stopDanceDemo(true);
       break;
     case MotionCommandType::TrackTarget:
       if (tracking_ && !maintenance_) {
@@ -614,6 +667,105 @@ void MotionCoreAdapter::stopMove() {
   axes_[3] = 0.0f;
 }
 
+void MotionCoreAdapter::startDanceDemo(uint32_t now) {
+  maintenance_ = false;
+  tracking_ = false;
+  enterTrackingState(TrackObservationState::Idle);
+  trackDecision_ = "idle";
+  stopMove();
+  heldPostureButtons_ = 0;
+  pulseButtons_ = 0;
+  legHeightTargetPercent_ = -1;
+  legHeightTargetActive_ = false;
+  legHeightForceSync_ = false;
+  legHeightForceSyncHoldUntilMs_ = 0;
+  ctrl.force_sync_leg_motion = 0;
+  ctrl.symmetric_leg_motion = 0;
+  ctrl.roll_adjust_target = 0.0f;
+  ctrl.leg_lean = 0.0f;
+  ctrl.leg_lean_target = 0.0f;
+  setGuardServoAngle(kDefaultGuardAngleDeg);
+
+  danceDemoQueued_ = true;
+  danceDemoActive_ = false;
+  danceDemoStartedMs_ = 0;
+  danceBalanceReadySinceMs_ = 0;
+  danceCueIndex_ = -1;
+
+  if (ctrl.fsm_state_machine.mode != fsm::mode_state::BALANCE) {
+    armDefaultStandPose();
+    pulseButton(BTN_RB, 120);
+  } else {
+    danceBalanceReadySinceMs_ = now;
+  }
+}
+
+void MotionCoreAdapter::stopDanceDemo(bool restoreNeutralPose) {
+  danceDemoQueued_ = false;
+  danceDemoActive_ = false;
+  danceDemoStartedMs_ = 0;
+  danceBalanceReadySinceMs_ = 0;
+  danceCueIndex_ = -1;
+  stopMove();
+  if (restoreNeutralPose) {
+    ctrl.leg_lean_target = 0.0f;
+    ctrl.roll_adjust_target = 0.0f;
+    setLegHeightTargetPercent(kDefaultLegHeightPercent);
+    setGuardServoAngle(kDefaultGuardAngleDeg);
+  }
+}
+
+void MotionCoreAdapter::applyDanceCue(int cueIndex) {
+  const int cueCount = sizeof(kDanceDemoCues) / sizeof(kDanceDemoCues[0]);
+  if (cueIndex < 0 || cueIndex >= cueCount) return;
+  const DanceCue& cue = kDanceDemoCues[cueIndex];
+  ctrl.leg_lean_target =
+      constrain((float)cue.leanPercent / 100.0f, -1.0f, 1.0f);
+  ctrl.roll_adjust_target = 0.0f;
+  setLegHeightTargetPercent(cue.heightPercent);
+  setGuardServoAngle(cue.guardAngleDeg);
+  setMoveAxes(cue.steerPercent, cue.drivePercent);
+}
+
+void MotionCoreAdapter::updateDanceDemo(uint32_t now) {
+  if (!danceDemoQueued_ && !danceDemoActive_) return;
+
+  if (maintenance_) {
+    stopDanceDemo(false);
+    return;
+  }
+
+  if (!danceDemoActive_) {
+    if (ctrl.fsm_state_machine.mode != fsm::mode_state::BALANCE) {
+      danceBalanceReadySinceMs_ = 0;
+      return;
+    }
+    if (danceBalanceReadySinceMs_ == 0) {
+      danceBalanceReadySinceMs_ = now;
+      return;
+    }
+    if (now - danceBalanceReadySinceMs_ < kDanceBalanceReadyMs) return;
+    danceDemoQueued_ = false;
+    danceDemoActive_ = true;
+    danceDemoStartedMs_ = now;
+    danceCueIndex_ = -1;
+  }
+
+  const uint32_t elapsedMs = now - danceDemoStartedMs_;
+  if (elapsedMs >= kDanceDemoDurationMs) {
+    stopDanceDemo(true);
+    return;
+  }
+
+  const int cueCount = sizeof(kDanceDemoCues) / sizeof(kDanceDemoCues[0]);
+  const int cueIndex =
+      min((int)(elapsedMs / kDanceCueDurationMs), cueCount - 1);
+  if (cueIndex != danceCueIndex_) {
+    danceCueIndex_ = cueIndex;
+    applyDanceCue(cueIndex);
+  }
+}
+
 void MotionCoreAdapter::holdTrackingChassis(bool resetReference) {
   (void)resetReference;
   trackYawTarget_ = 0.0f;
@@ -746,6 +898,7 @@ void MotionCoreAdapter::updateTrackingMotion(uint32_t now) {
 }
 
 const char* MotionCoreAdapter::modeName() const {
+  if (danceDemoQueued_ || danceDemoActive_) return "dance_demo";
   switch (ctrl.fsm_state_machine.mode) {
     case fsm::mode_state::FIRST_BOOT:
       return "boot";

@@ -11,6 +11,7 @@ import {
   KeyboardArrowRight,
   KeyboardArrowUp,
   MicNone,
+  MusicNote,
   Refresh,
   SportsKabaddi,
   SettingsRounded,
@@ -73,7 +74,7 @@ const copyByLanguage = {
     moveControl: 'Drive Control', moveSpeed: 'Drive Speed', gimbalControl: 'Gimbal Control', gimbalSpeed: 'Gimbal Speed', guard: 'Guard', legHeight: 'Leg Height', extendLegs: 'Extend legs', retractLegs: 'Retract legs', bodyLean: 'Body Lean', leanLeft: 'Lean left', leanRight: 'Lean right',
     robotStatus: 'Robot Status', oledPreview: 'OLED Face Preview', commonActions: 'Actions', settings: 'Settings', device: 'Device', network: 'Network', camera: 'Camera', maintenance: 'Advanced Maintenance',
     robot: 'Robot', detection: 'Target', attitude: 'Attitude', net: 'Network', battery: 'Battery', boardIp: 'Board IP', cameraStatus: 'Camera Status',
-    stand: 'Stand', track: 'Track', sit: 'Sit', reset: 'Reset', jump: 'Jump', jumpForward: 'Jump Forward', jumpBackward: 'Jump Back', jumpLeft: 'Jump Left', jumpRight: 'Jump Right',
+    stand: 'Stand', track: 'Track', waltz: 'Waltz Demo', sit: 'Sit', reset: 'Reset', jump: 'Jump', jumpForward: 'Jump Forward', jumpBackward: 'Jump Back', jumpLeft: 'Jump Left', jumpRight: 'Jump Right',
     language: 'Language', english: 'English', chinese: 'Chinese', robotName: 'Robot Name', controlMode: 'Control Mode', robotHost: 'Robot Host', homeWifiSsid: 'Home WiFi SSID', homeWifiPassword: 'Home WiFi Password', cameraStreamUrl: 'Camera Stream URL', cameraResolution: 'Camera Resolution', autoDetect: 'Auto detect',
     gamepadHint: 'Gamepad mode disables the web controller after reboot. Hold the IO34 button during power-on to force WiFi / Web recovery.',
     maintenanceOn: 'Maintenance mode enabled', maintenanceOff: 'Maintenance mode disabled', enterMaintenance: 'Enter Maintenance', exitMaintenance: 'Exit Maintenance', ledTest: 'LED Test', maintenanceHint: 'Maintenance mode stops motion control. Use it for LED tests, firmware updates, and firmware rollback.',
@@ -87,7 +88,7 @@ const copyByLanguage = {
     moveControl: '移动控制', moveSpeed: '移动速度', gimbalControl: '云台控制', gimbalSpeed: '云台速度', guard: '护板', legHeight: '腿部高度', extendLegs: '伸腿', retractLegs: '缩腿', bodyLean: '左右侧身', leanLeft: '向左侧身', leanRight: '向右侧身',
     robotStatus: '机器人状态', oledPreview: '表情屏预览', commonActions: '模式与动作', settings: '设置', device: '设备', network: '网络', camera: '相机', maintenance: '高级维护',
     robot: '机器人', detection: '识别', attitude: '姿态', net: '网络', battery: '电量', boardIp: '主板 IP', cameraStatus: '相机状态',
-    stand: '站立', track: '追踪', sit: '坐下', reset: '复位', jump: '原地跳', jumpForward: '前跳', jumpBackward: '后跳', jumpLeft: '左跳', jumpRight: '右跳',
+    stand: '站立', track: '追踪', waltz: '华尔兹 Demo', sit: '坐下', reset: '复位', jump: '原地跳', jumpForward: '前跳', jumpBackward: '后跳', jumpLeft: '左跳', jumpRight: '右跳',
     language: '语言', english: 'English', chinese: '中文', robotName: '机器人名称', controlMode: '控制模式', robotHost: '机器人地址', homeWifiSsid: '家庭 WiFi SSID', homeWifiPassword: '家庭 WiFi 密码', cameraStreamUrl: '摄像头视频地址', cameraResolution: '摄像头分辨率', autoDetect: '自动检测',
     gamepadHint: '手柄模式重启后会关闭网页控制。开机时按住 IO34 按钮可强制进入 WiFi / Web 恢复模式。',
     maintenanceOn: '维护模式已开启', maintenanceOff: '维护模式已关闭', enterMaintenance: '进入维护', exitMaintenance: '退出维护', ledTest: '灯效测试', maintenanceHint: '维护模式会停止运动控制，用于灯效测试、固件升级和固件回滚。',
@@ -98,6 +99,7 @@ const copyByLanguage = {
 
 function modeLabel(activeMode: string, copy: (typeof copyByLanguage)[UiLanguage]) {
   if (activeMode === 'track_mode') return copy.track;
+  if (activeMode === 'dance_demo') return copy.waltz;
   return copy.idle;
 }
 
@@ -225,6 +227,7 @@ const api = new RobotApi(initialHost, initialTransport);
 type ActionLabelKey =
   | 'stand'
   | 'track'
+  | 'waltz'
   | 'sit'
   | 'reset'
   | 'jump'
@@ -236,6 +239,7 @@ type ActionLabelKey =
 const actionButtons: { labelKey: ActionLabelKey; action: string; icon: ReactNode }[] = [
   { labelKey: 'stand', action: 'stand', icon: <SmartToyOutlined /> },
   { labelKey: 'track', action: 'track_mode', icon: <CenterFocusStrong /> },
+  { labelKey: 'waltz', action: 'dance_demo', icon: <MusicNote /> },
   { labelKey: 'sit', action: 'sit', icon: <MicNone /> },
   { labelKey: 'reset', action: 'reset', icon: <CenterFocusStrong /> },
   { labelKey: 'jump', action: 'jump', icon: <SportsKabaddi /> },
@@ -496,21 +500,23 @@ export default function App() {
   async function handleActionPress(action: string) {
     if (actionInFlight.current || otaLocked) return;
     actionInFlight.current = true;
-    const isTrackToggle = action === 'track_mode';
-    const nextAction = isTrackToggle && telemetry.activeMode === action ? 'cancel_kick' : action;
-    if (isTrackToggle) {
+    const isToggleMode = action === 'track_mode' || action === 'dance_demo';
+    const nextAction = isToggleMode && telemetry.activeMode === action
+      ? (action === 'track_mode' ? 'cancel_kick' : 'dance_demo_stop')
+      : action;
+    if (isToggleMode) {
       setTelemetry((current) => ({
         ...current,
-        activeMode: nextAction === 'track_mode' ? 'track_mode' : '',
+        activeMode: nextAction === action ? action : '',
       }));
     }
     try {
       const accepted = await api.sendAction(nextAction);
-      if (!accepted && isTrackToggle) setSettingsMessage('Command rejected');
+      if (!accepted && isToggleMode) setSettingsMessage('Command rejected');
       if (accepted && ['stand', 'sit', 'reset'].includes(nextAction)) {
         setLegLeanDraft(0);
       }
-      if (accepted && isTrackToggle && nextAction === 'track_mode') {
+      if (accepted && action === 'track_mode' && nextAction === 'track_mode') {
         await api.sendTrackScan();
       }
       if (accepted) await new Promise((resolve) => window.setTimeout(resolve, 80));
@@ -1722,7 +1728,7 @@ function ModeActionStrip({
   copy: (typeof copyByLanguage)[UiLanguage];
   onAction: (action: string) => void | Promise<void>;
 }) {
-  const toggleModes = new Set(['track_mode']);
+  const toggleModes = new Set(['track_mode', 'dance_demo']);
 
   return (
     <InfoCard title={copy.commonActions}>

@@ -10,6 +10,8 @@ enum class WebRobotAction : uint8_t {
   ResetPose,
   CancelKick,
   TrackMode,
+  DanceDemo,
+  StopDanceDemo,
   LedTest,
   Jump,
   JumpForward,

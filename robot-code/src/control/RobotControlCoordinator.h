@@ -12,6 +12,7 @@ void syncControlModeIndicatorState(bool gamepadEnabled, bool force = false);
 void processWebControlState(bool gamepadEnabled);
 void publishControlStatus(bool gamepadConnected);
 bool isTrackModeActive();
+const char* activeUiMode();
 
 #if ENABLE_GAMEPAD_BLE
 void processControllerData(const GamepadControllerNotificationParser& data);

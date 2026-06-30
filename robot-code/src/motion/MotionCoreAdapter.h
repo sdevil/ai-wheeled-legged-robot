@@ -21,6 +21,10 @@ class MotionCoreAdapter final : public MotionCore {
   void applyTrackObservation(const MotionCommand& command);
   void enterTrackingState(TrackObservationState state);
   void updateTrackingMotion(uint32_t now);
+  void startDanceDemo(uint32_t now);
+  void stopDanceDemo(bool restoreNeutralPose);
+  void updateDanceDemo(uint32_t now);
+  void applyDanceCue(int cueIndex);
   void updateStandNudge(uint32_t now);
   void updateLegHeightTarget(uint32_t now);
   void armDefaultStandPose();
@@ -88,9 +92,14 @@ class MotionCoreAdapter final : public MotionCore {
   bool legHeightForceSync_ = false;
   bool defaultStandPosePending_ = false;
   bool standNudgePending_ = false;
+  bool danceDemoQueued_ = false;
+  bool danceDemoActive_ = false;
   float legHeightBaseTarget_ = 0.0f;
   uint32_t lastLegHeightUpdateMs_ = 0;
   uint32_t legHeightForceSyncHoldUntilMs_ = 0;
+  uint32_t danceDemoStartedMs_ = 0;
+  uint32_t danceBalanceReadySinceMs_ = 0;
+  int danceCueIndex_ = -1;
   int guardServoAngleDeg_ = 0;
 };
 

@@ -26,6 +26,8 @@ enum class MotionCommandType : uint8_t {
   JumpRight,
   TrackStart,
   TrackStop,
+  DanceDemoStart,
+  DanceDemoStop,
   TrackTarget,
   TrackObservation,
   LegLean,

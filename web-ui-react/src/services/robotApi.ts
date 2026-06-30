@@ -88,7 +88,7 @@ export class RobotApi {
 
   private transportLabel() {
     if (this.transportMode === 'http') return 'HTTP';
-    return this.wsReady ? 'WebSocket' : 'HTTP fallback';
+    return 'WebSocket';
   }
 
   private cameraStatusUrl(cameraUrl: string) {
@@ -158,6 +158,23 @@ export class RobotApi {
       const targetLabelRaw = cameraRuntime?.label || data.camera_detect_label || 'NO_TARGET';
       const targetCount = cameraRuntime?.count ?? data.camera_detect_count ?? 0;
       const cameraResolution = cameraRuntime?.resolution || data.camera_resolution || '';
+      const activeMode = data.active_mode || '';
+      const robotState = data.sitting
+        ? 'Sitting'
+        : activeMode === 'track_mode'
+          ? 'Track'
+          : activeMode === 'dance_demo'
+            ? 'Waltz'
+            : data.enabled
+              ? 'Active'
+              : 'Standby';
+      const aiMode = activeMode === 'track_mode'
+        ? 'Track'
+        : activeMode === 'dance_demo'
+          ? 'Waltz'
+          : data.enabled
+            ? 'Active'
+            : 'Standby';
       return {
         bootId: data.boot_id || 0,
         firmwareVersion: data.firmware_version || '',
@@ -169,8 +186,7 @@ export class RobotApi {
         online: true,
         robotHost: this.host,
         robotIp: data.robot_sta_ip || this.host,
-        robotState: data.sitting ? 'Sitting' : data.active_mode === 'track_mode'
-          ? 'Track' : data.enabled ? 'Active' : 'Standby',
+        robotState,
         robotNetState: data.robot_net_state,
         batteryPercent: data.battery_percent,
         batteryVoltage: data.battery_voltage,
@@ -180,7 +196,7 @@ export class RobotApi {
         wifiDbm: 0,
         fps: 0,
         latencyMs: 0,
-        aiMode: data.active_mode === 'track_mode' ? 'Track' : data.enabled ? 'Active' : 'Standby',
+        aiMode,
         targetLabelRaw,
         targetLabel: targetLabelRaw === 'NO_TARGET'
           ? 'No Target'
@@ -195,7 +211,7 @@ export class RobotApi {
         cameraIp: data.camera_net_ip,
         cameraUrl,
         clients: data.clients,
-        activeMode: data.active_mode || '',
+        activeMode,
         maintenanceMode: data.maintenance,
         otaRunning: data.ota_running,
         otaProgress: data.ota_progress,
@@ -400,9 +416,7 @@ export class RobotApi {
 
   sendTrackDistanceAdjust(value: number) {
     const adjusted = Math.max(-100, Math.min(100, Math.round(value)));
-    if (!this.sendSocketNow({ type: 'track_distance', value: adjusted })) {
-      void this.post('/api/camera/track_distance', { value: String(adjusted) });
-    }
+    this.sendSocketNow({ type: 'track_distance', value: adjusted });
   }
 
   sendGimbal(x: number, y: number, speed: number) {
@@ -460,16 +474,7 @@ export class RobotApi {
     profile = 0,
   ) {
     const ack = this.sendSocketRequest({ type: 'track_roi', ...selection, profile });
-    if (ack) return ack;
-    try {
-      return (await this.post('/api/camera/track', {
-        x: String(selection.x), y: String(selection.y),
-        w: String(selection.w), h: String(selection.h),
-        profile: String(profile),
-      })).ok;
-    } catch {
-      return false;
-    }
+    return ack ? ack : false;
   }
 
   async sendTrackUnlock() {
@@ -478,22 +483,12 @@ export class RobotApi {
 
   async sendTrackScan() {
     const ack = this.sendSocketRequest({ type: 'track_unlock' });
-    if (ack) return ack;
-    try {
-      return (await this.post('/api/camera/track_unlock', {})).ok;
-    } catch {
-      return false;
-    }
+    return ack ? ack : false;
   }
 
   async sendAction(name: string) {
     const ack = this.sendSocketRequest({ type: 'action', name });
-    if (ack) return ack;
-    try {
-      return (await this.post('/api/action', { name })).ok;
-    } catch {
-      return false;
-    }
+    return ack ? ack : false;
   }
 
   uploadFirmware(file: File, onProgress: (percent: number) => void, usbPowered = false) {

@@ -1,6 +1,7 @@
 #include "control/RobotControlCoordinator.h"
 
 #include <math.h>
+#include <string.h>
 
 #include "Diagnostics.h"
 #include "RGBController.h"
@@ -36,6 +37,8 @@ const char* webActionName(WebRobotAction action) {
     case WebRobotAction::ResetPose: return "reset";
     case WebRobotAction::CancelKick: return "cancel";
     case WebRobotAction::TrackMode: return "track_mode";
+    case WebRobotAction::DanceDemo: return "dance_demo";
+    case WebRobotAction::StopDanceDemo: return "dance_demo_stop";
     case WebRobotAction::LedTest: return "led_test";
     case WebRobotAction::Jump: return "jump_place";
     case WebRobotAction::JumpForward: return "jump_forward";
@@ -78,6 +81,18 @@ void dispatchWebAction(WebRobotAction action) {
       sendCameraTrackScan();
       commandMotion(MotionCommand::simple(MotionCommandType::TrackStart),
                     "web:action:track_mode:start", true);
+      break;
+    case WebRobotAction::DanceDemo:
+      trackModeActive = false;
+      sendCameraTrackStop();
+      commandMotion(MotionCommand::simple(MotionCommandType::TrackStop),
+                    "web:action:dance_demo:track_stop", false);
+      commandMotion(MotionCommand::simple(MotionCommandType::DanceDemoStart),
+                    trigger, true);
+      break;
+    case WebRobotAction::StopDanceDemo:
+      commandMotion(MotionCommand::simple(MotionCommandType::DanceDemoStop),
+                    trigger, true);
       break;
     case WebRobotAction::LedTest:
       startColorSequenceBlink();
@@ -244,6 +259,13 @@ void publishControlStatus(bool gamepadConnected) {
 }
 
 bool isTrackModeActive() { return trackModeActive; }
+
+const char* activeUiMode() {
+  if (trackModeActive) return "track_mode";
+  const MotionTelemetry telemetry = motionCore().telemetry();
+  if (strcmp(telemetry.mode, "dance_demo") == 0) return "dance_demo";
+  return "";
+}
 
 #if ENABLE_GAMEPAD_BLE
 void processControllerData(const GamepadControllerNotificationParser& data) {

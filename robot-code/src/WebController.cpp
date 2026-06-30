@@ -65,8 +65,8 @@ constexpr char PREF_UI_LANGUAGE[] = "ui_language";
 constexpr char DEFAULT_UI_LANGUAGE[] = "en";
 constexpr char DEFAULT_ROBOT_NAME[] = "WRobot-sdevil";
 constexpr char DEFAULT_CAMERA_RESOLUTION[] = "640x480";
-constexpr char ROBOT_FIRMWARE_VERSION[] = "3.2.148";
-constexpr char ROBOT_FIRMWARE_BUILD[] = "2026-06-30-leg-stability-01";
+constexpr char ROBOT_FIRMWARE_VERSION[] = "3.2.149";
+constexpr char ROBOT_FIRMWARE_BUILD[] = "2026-06-30-waltz-demo-01";
 constexpr unsigned long CAMERA_STATUS_STALE_MS = 5000;
 constexpr char CONTROL_MODE_WIFI[] = "wifi";
 constexpr char CONTROL_MODE_GAMEPAD[] = "gamepad";
@@ -689,7 +689,7 @@ void sendJsonStatus() {
   cameraActiveResolution = statusCameraActiveResolution;
   cameraDetectCount = statusCameraDetectCount;
   lastEvent = statusLastEvent;
-  activeMode = isTrackModeActive() ? "track_mode" : "";
+  activeMode = activeUiMode();
   unlockStatus();
 
   const unsigned long cameraStatusAgeMs =
@@ -945,6 +945,8 @@ WebRobotAction actionFromName(const String& name) {
   if (name == "reset") return WebRobotAction::ResetPose;
   if (name == "cancel_kick") return WebRobotAction::CancelKick;
   if (name == "track_mode") return WebRobotAction::TrackMode;
+  if (name == "dance_demo") return WebRobotAction::DanceDemo;
+  if (name == "dance_demo_stop") return WebRobotAction::StopDanceDemo;
   if (name == "led_test") return WebRobotAction::LedTest;
   if (name == "jump") return WebRobotAction::Jump;
   if (name == "jump_forward") return WebRobotAction::JumpForward;
