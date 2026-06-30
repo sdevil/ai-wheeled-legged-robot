@@ -18,6 +18,7 @@
 #include "VoltageMonitor.h"
 #include "camera/CameraGimbalController.h"
 #include "control/RobotControlCoordinator.h"
+#include "control/WebControlState.h"
 #include "generated/WebUiBundle.h"
 #include "motion/MotionCoreAdapter.h"
 
@@ -75,35 +76,11 @@ DNSServer dnsServer;
 WiFiServer websocketServer(WEBSOCKET_PORT);
 WiFiClient websocketClient;
 TaskHandle_t webTaskHandle = nullptr;
-portMUX_TYPE stateMux = portMUX_INITIALIZER_UNLOCKED;
 bool websocketHandshakeComplete = false;
 bool websocketHadClient = false;
 String websocketHandshakeBuffer;
 uint8_t websocketFrameBuffer[WEBSOCKET_MAX_FRAME_SIZE + 16];
 size_t websocketFrameLength = 0;
-
-int driveX = 0;
-int driveY = 0;
-bool driveActive = false;
-int gimbalYawX = 0;
-bool gimbalYawActive = false;
-unsigned long lastGimbalYawMs = 0;
-int pendingCameraPitchDelta = 0;
-int pendingGuardServoAngle = -1;
-int pendingLegHeightDirection = 99;
-int pendingLegHeightPercent = -1;
-int pendingLegLeanPercent = 999;
-char pendingLegLeanSource[32] = "boot";
-int lastLegLeanPercent = 0;
-char lastLegLeanSource[32] = "boot";
-unsigned long lastDriveCommandMs = 0;
-uint32_t driveCommandCount = 0;
-uint32_t driveCommandMaxGapMs = 0;
-uint32_t websocketCloseCount = 0;
-unsigned long lastLegHeightCommandMs = 0;
-unsigned long lastLegLeanCommandMs = 0;
-uint32_t legLeanCommandCount = 0;
-uint32_t legLeanCommandMaxGapMs = 0;
 QueueHandle_t actionQueue = nullptr;
 SemaphoreHandle_t statusMutex = nullptr;
 
@@ -296,20 +273,7 @@ void handleDiagnostics() {
   unsigned long cameraVersionSeenMs;
   bool otaRunning;
   int otaProgress;
-  int currentDriveX;
-  int currentDriveY;
-  bool currentDriveActive;
-  unsigned long currentDriveUpdatedAt;
-  uint32_t currentDriveCommandCount;
-  uint32_t currentDriveMaxGapMs;
-  int currentPendingLegLean;
-  char currentPendingLegLeanSource[32];
-  int currentLastLegLean;
-  char currentLastLegLeanSource[32];
-  unsigned long currentLastLegLeanMs;
-  uint32_t currentLegLeanCommandCount;
-  uint32_t currentLegLeanMaxGapMs;
-  uint32_t currentWebsocketCloseCount;
+  WebControlDiagnosticsSnapshot controlSnapshot = {};
 
   lockStatus();
   robotNetState = statusRobotNetState;
@@ -325,31 +289,12 @@ void handleDiagnostics() {
   otaProgress = statusOtaProgress;
   unlockStatus();
 
-  portENTER_CRITICAL(&stateMux);
-  currentDriveX = driveX;
-  currentDriveY = driveY;
-  currentDriveActive = driveActive;
-  currentDriveUpdatedAt = lastDriveCommandMs;
-  currentDriveCommandCount = driveCommandCount;
-  currentDriveMaxGapMs = driveCommandMaxGapMs;
-  currentPendingLegLean = pendingLegLeanPercent;
-  strncpy(currentPendingLegLeanSource, pendingLegLeanSource,
-          sizeof(currentPendingLegLeanSource) - 1);
-  currentPendingLegLeanSource[sizeof(currentPendingLegLeanSource) - 1] = '\0';
-  currentLastLegLean = lastLegLeanPercent;
-  strncpy(currentLastLegLeanSource, lastLegLeanSource,
-          sizeof(currentLastLegLeanSource) - 1);
-  currentLastLegLeanSource[sizeof(currentLastLegLeanSource) - 1] = '\0';
-  currentLastLegLeanMs = lastLegLeanCommandMs;
-  currentLegLeanCommandCount = legLeanCommandCount;
-  currentLegLeanMaxGapMs = legLeanCommandMaxGapMs;
-  currentWebsocketCloseCount = websocketCloseCount;
-  portEXIT_CRITICAL(&stateMux);
+  webControlGetDiagnosticsSnapshot(controlSnapshot);
 
   const unsigned long driveAgeMs =
-      currentDriveUpdatedAt == 0 ? 0 : millis() - currentDriveUpdatedAt;
+      controlSnapshot.driveUpdatedAtMs == 0 ? 0 : millis() - controlSnapshot.driveUpdatedAtMs;
   const unsigned long legLeanAgeMs =
-      currentLastLegLeanMs == 0 ? 0 : millis() - currentLastLegLeanMs;
+      controlSnapshot.lastLegLeanCommandAtMs == 0 ? 0 : millis() - controlSnapshot.lastLegLeanCommandAtMs;
   const unsigned long nowMs = millis();
   const unsigned long cameraStatusAgeMs =
       cameraLastSeenMs == 0 ? 0 : nowMs - cameraLastSeenMs;
@@ -404,20 +349,20 @@ void handleDiagnostics() {
          ",\"web_control\":{\"websocket_connected\":" +
              String(websocketHandshakeComplete && websocketClient.connected()
                         ? "true" : "false") +
-         ",\"drive_active\":" + String(currentDriveActive ? "true" : "false") +
-         ",\"x\":" + String(currentDriveX) +
-         ",\"y\":" + String(currentDriveY) +
+         ",\"drive_active\":" + String(controlSnapshot.driveActive ? "true" : "false") +
+         ",\"x\":" + String(controlSnapshot.driveX) +
+         ",\"y\":" + String(controlSnapshot.driveY) +
          ",\"command_age_ms\":" + String(driveAgeMs) +
-         ",\"command_count\":" + String(currentDriveCommandCount) +
-         ",\"max_command_gap_ms\":" + String(currentDriveMaxGapMs) +
-         ",\"pending_leg_lean\":" + String(currentPendingLegLean == 999 ? 0 : currentPendingLegLean) +
-         ",\"pending_leg_lean_source\":\"" + jsonEscape(currentPendingLegLeanSource) + "\"" +
-         ",\"last_leg_lean\":" + String(currentLastLegLean) +
-         ",\"last_leg_lean_source\":\"" + jsonEscape(currentLastLegLeanSource) + "\"" +
+         ",\"command_count\":" + String(controlSnapshot.driveCommandCount) +
+         ",\"max_command_gap_ms\":" + String(controlSnapshot.driveCommandMaxGapMs) +
+         ",\"pending_leg_lean\":" + String(controlSnapshot.pendingLegLeanPercent == 999 ? 0 : controlSnapshot.pendingLegLeanPercent) +
+         ",\"pending_leg_lean_source\":\"" + jsonEscape(controlSnapshot.pendingLegLeanSource) + "\"" +
+         ",\"last_leg_lean\":" + String(controlSnapshot.lastLegLeanPercent) +
+         ",\"last_leg_lean_source\":\"" + jsonEscape(controlSnapshot.lastLegLeanSource) + "\"" +
          ",\"last_leg_lean_age_ms\":" + String(legLeanAgeMs) +
-         ",\"leg_lean_count\":" + String(currentLegLeanCommandCount) +
-         ",\"leg_lean_max_gap_ms\":" + String(currentLegLeanMaxGapMs) +
-         ",\"websocket_close_count\":" + String(currentWebsocketCloseCount) + "}" +
+         ",\"leg_lean_count\":" + String(controlSnapshot.legLeanCommandCount) +
+         ",\"leg_lean_max_gap_ms\":" + String(controlSnapshot.legLeanCommandMaxGapMs) +
+         ",\"websocket_close_count\":" + String(controlSnapshot.websocketCloseCount) + "}" +
          ",\"camera\":{\"state\":\"" + jsonEscape(cameraState) +
          "\",\"ip\":\"" + jsonEscape(cameraIp) +
          "\",\"resolution\":\"" + jsonEscape(cameraResolution) +
@@ -1015,107 +960,46 @@ bool setDriveCommand(int x, int y) {
   lockStatus();
   const bool controlsLocked = statusMaintenanceMode || statusOtaInProgress;
   unlockStatus();
-  if (controlsLocked) return false;
-  x = constrain(x, -100, 100);
-  y = constrain(y, -100, 100);
-  const unsigned long now = millis();
-  portENTER_CRITICAL(&stateMux);
-  if (lastDriveCommandMs != 0) {
-    const uint32_t gapMs = now - lastDriveCommandMs;
-    if (gapMs > driveCommandMaxGapMs) driveCommandMaxGapMs = gapMs;
-  }
-  ++driveCommandCount;
-  driveX = x;
-  driveY = y;
-  driveActive = !(x == 0 && y == 0);
-  lastDriveCommandMs = now;
-  portEXIT_CRITICAL(&stateMux);
-  return true;
+  return webControlSetDriveCommand(controlsLocked, x, y);
 }
 
 bool setGimbalYawCommand(int x) {
   lockStatus();
   const bool controlsLocked = statusMaintenanceMode || statusOtaInProgress;
   unlockStatus();
-  if (controlsLocked) return false;
-  x = constrain(x, -100, 100);
-  portENTER_CRITICAL(&stateMux);
-  gimbalYawX = x;
-  gimbalYawActive = x != 0;
-  lastGimbalYawMs = millis();
-  portEXIT_CRITICAL(&stateMux);
-  return true;
+  return webControlSetGimbalYawCommand(controlsLocked, x);
 }
 
 void queueCameraPitchDelta(int delta) {
-  portENTER_CRITICAL(&stateMux);
-  pendingCameraPitchDelta = constrain(pendingCameraPitchDelta + delta, -18, 18);
-  portEXIT_CRITICAL(&stateMux);
+  webControlQueueCameraPitchDelta(delta);
 }
 
 bool setGuardServoAngleCommand(int angle) {
   lockStatus();
   const bool controlsLocked = statusMaintenanceMode || statusOtaInProgress;
   unlockStatus();
-  if (controlsLocked) return false;
-  angle = constrain(angle, 0, 180);
-  portENTER_CRITICAL(&stateMux);
-  pendingGuardServoAngle = angle;
-  portEXIT_CRITICAL(&stateMux);
-  return true;
+  return webControlSetGuardServoAngleCommand(controlsLocked, angle);
 }
 
 bool setLegHeightCommand(int direction) {
   lockStatus();
   const bool controlsLocked = statusMaintenanceMode || statusOtaInProgress;
   unlockStatus();
-  if (controlsLocked) return false;
-  direction = constrain(direction, -1, 1);
-  portENTER_CRITICAL(&stateMux);
-  pendingLegHeightPercent = -1;
-  pendingLegHeightDirection = direction;
-  lastLegHeightCommandMs = direction == 0 ? 0 : millis();
-  portEXIT_CRITICAL(&stateMux);
-  return true;
+  return webControlSetLegHeightCommand(controlsLocked, direction);
 }
 
 bool setLegHeightPercentCommand(int percent) {
   lockStatus();
   const bool controlsLocked = statusMaintenanceMode || statusOtaInProgress;
   unlockStatus();
-  if (controlsLocked) return false;
-  percent = constrain(percent, 0, 100);
-  portENTER_CRITICAL(&stateMux);
-  pendingLegHeightPercent = percent;
-  pendingLegHeightDirection = 99;
-  lastLegHeightCommandMs = 0;
-  portEXIT_CRITICAL(&stateMux);
-  return true;
+  return webControlSetLegHeightPercentCommand(controlsLocked, percent);
 }
 
 bool setLegLeanCommand(int percent, const char* source) {
   lockStatus();
   const bool controlsLocked = statusMaintenanceMode || statusOtaInProgress;
   unlockStatus();
-  if (controlsLocked) return false;
-  percent = constrain(percent, -100, 100);
-  const unsigned long nowMs = millis();
-  portENTER_CRITICAL(&stateMux);
-  if (lastLegLeanCommandMs != 0) {
-    const uint32_t gap = nowMs - lastLegLeanCommandMs;
-    if (gap > legLeanCommandMaxGapMs) legLeanCommandMaxGapMs = gap;
-  }
-  ++legLeanCommandCount;
-  pendingLegLeanPercent = percent;
-  strncpy(pendingLegLeanSource, source == nullptr ? "unknown" : source,
-          sizeof(pendingLegLeanSource) - 1);
-  pendingLegLeanSource[sizeof(pendingLegLeanSource) - 1] = '\0';
-  lastLegLeanPercent = percent;
-  strncpy(lastLegLeanSource, pendingLegLeanSource, sizeof(lastLegLeanSource) - 1);
-  lastLegLeanSource[sizeof(lastLegLeanSource) - 1] = '\0';
-  lastLegLeanCommandMs = nowMs;
-  portEXIT_CRITICAL(&stateMux);
-  return true;
+  return webControlSetLegLeanCommand(controlsLocked, percent, source);
 }
 
 bool isMaintenanceOnlyAction(WebRobotAction action) {
@@ -1173,19 +1057,7 @@ bool jsonStringValue(const String& json, const char* key, String& value) {
 }
 
 void stopWebSocketDrive() {
-  portENTER_CRITICAL(&stateMux);
-  driveX = 0;
-  driveY = 0;
-  driveActive = false;
-  gimbalYawX = 0;
-  gimbalYawActive = false;
-  lastGimbalYawMs = 0;
-  lastDriveCommandMs = 0;
-  pendingCameraPitchDelta = 0;
-  pendingLegHeightDirection = 0;
-  pendingLegHeightPercent = -1;
-  lastLegHeightCommandMs = 0;
-  portEXIT_CRITICAL(&stateMux);
+  webControlStopRealtimeCommands();
 }
 
 void closeWebSocketClient() {
@@ -1194,9 +1066,7 @@ void closeWebSocketClient() {
   websocketHandshakeComplete = false;
   websocketHandshakeBuffer = "";
   websocketFrameLength = 0;
-  portENTER_CRITICAL(&stateMux);
-  websocketCloseCount++;
-  portEXIT_CRITICAL(&stateMux);
+  webControlNoteWebsocketClosed();
   stopWebSocketDrive();
 }
 
@@ -1558,15 +1428,7 @@ void handleLegLean() {
 }
 
 void expireLegControlCommands() {
-  constexpr unsigned long timeoutMs = 350;
-  const unsigned long now = millis();
-  portENTER_CRITICAL(&stateMux);
-  if (lastLegHeightCommandMs != 0 &&
-      now - lastLegHeightCommandMs > timeoutMs) {
-    pendingLegHeightDirection = 0;
-    lastLegHeightCommandMs = 0;
-  }
-  portEXIT_CRITICAL(&stateMux);
+  webControlExpireLegHeightCommands();
 }
 
 
@@ -1711,9 +1573,9 @@ void handleOtaUpload() {
     }
     statusOtaMessage = "Uploading firmware";
     Update.onProgress([](size_t progress, size_t total) {
-      portENTER_CRITICAL(&stateMux);
+      lockStatus();
       statusOtaProgress = total == 0 ? 0 : (int)((progress * 100U) / total);
-      portEXIT_CRITICAL(&stateMux);
+      unlockStatus();
     });
   } else if (upload.status == UPLOAD_FILE_WRITE) {
     if (!otaUploadAccepted) return;
@@ -1856,6 +1718,7 @@ void webServerTask(void *) {
 
 void initWebController() {
   if (statusMutex == nullptr) statusMutex = xSemaphoreCreateMutex();
+  webControlStateInit();
   applyStoredSettings();
   if (actionQueue == nullptr) actionQueue = xQueueCreate(8, sizeof(WebRobotAction));
   WiFi.mode(WIFI_AP);
@@ -1890,36 +1753,11 @@ void initWebController() {
 }
 
 bool getWebDriveCommand(int &joyX, int &joyY) {
-  int x;
-  int y;
-  bool active;
-  unsigned long updatedAt;
-  portENTER_CRITICAL(&stateMux);
-  x = driveX;
-  y = driveY;
-  active = driveActive;
-  updatedAt = lastDriveCommandMs;
-  portEXIT_CRITICAL(&stateMux);
-
-  if (!active || updatedAt == 0 || millis() - updatedAt > COMMAND_TIMEOUT_MS) return false;
-  joyX = x;
-  joyY = y;
-  return true;
+  return webControlGetDriveCommand(joyX, joyY, COMMAND_TIMEOUT_MS);
 }
 
 bool getWebGimbalYawCommand(int &joyX) {
-  int x;
-  unsigned long updatedAt;
-  bool active;
-  portENTER_CRITICAL(&stateMux);
-  x = gimbalYawX;
-  active = gimbalYawActive;
-  updatedAt = lastGimbalYawMs;
-  portEXIT_CRITICAL(&stateMux);
-
-  if (!active || updatedAt == 0 || millis() - updatedAt > COMMAND_TIMEOUT_MS) return false;
-  joyX = x;
-  return true;
+  return webControlGetGimbalYawCommand(joyX, COMMAND_TIMEOUT_MS);
 }
 WebRobotAction consumeWebRobotAction() {
   WebRobotAction action = WebRobotAction::None;
@@ -1928,58 +1766,23 @@ WebRobotAction consumeWebRobotAction() {
 }
 
 int consumeWebCameraPitchDelta() {
-  portENTER_CRITICAL(&stateMux);
-  const int delta = pendingCameraPitchDelta;
-  pendingCameraPitchDelta = 0;
-  portEXIT_CRITICAL(&stateMux);
-  return delta;
+  return webControlConsumeCameraPitchDelta();
 }
 
 bool consumeWebGuardServoAngle(int& angle) {
-  portENTER_CRITICAL(&stateMux);
-  if (pendingGuardServoAngle < 0) {
-    portEXIT_CRITICAL(&stateMux);
-    return false;
-  }
-  angle = pendingGuardServoAngle;
-  pendingGuardServoAngle = -1;
-  portEXIT_CRITICAL(&stateMux);
-  return true;
+  return webControlConsumeGuardServoAngle(angle);
 }
 
 bool consumeWebLegHeightDirection(int& direction) {
-  portENTER_CRITICAL(&stateMux);
-  if (pendingLegHeightDirection == 99) {
-    portEXIT_CRITICAL(&stateMux);
-    return false;
-  }
-  direction = pendingLegHeightDirection;
-  pendingLegHeightDirection = 99;
-  portEXIT_CRITICAL(&stateMux);
-  return true;
+  return webControlConsumeLegHeightDirection(direction);
 }
 
 bool consumeWebLegHeightPercent(int& percent) {
-  portENTER_CRITICAL(&stateMux);
-  if (pendingLegHeightPercent < 0) {
-    portEXIT_CRITICAL(&stateMux);
-    return false;
-  }
-  percent = pendingLegHeightPercent;
-  portEXIT_CRITICAL(&stateMux);
-  return true;
+  return webControlConsumeLegHeightPercent(percent);
 }
 
 bool consumeWebLegLeanPercent(int& percent) {
-  portENTER_CRITICAL(&stateMux);
-  if (pendingLegLeanPercent == 999) {
-    portEXIT_CRITICAL(&stateMux);
-    return false;
-  }
-  percent = pendingLegLeanPercent;
-  pendingLegLeanPercent = 999;
-  portEXIT_CRITICAL(&stateMux);
-  return true;
+  return webControlConsumeLegLeanPercent(percent);
 }
 
 bool isWebOtaInProgress() {
