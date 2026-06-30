@@ -60,9 +60,9 @@ constexpr uint32_t kStandNudgeStableMs = 250;
 constexpr uint32_t kStandNudgeDurationMs = 0;
 constexpr float kStandNudgeAxis = 0.0f;
 constexpr uint32_t kDanceCueDurationMs = 1000;
-constexpr uint32_t kDanceDemoDurationMs = 60000;
+constexpr uint32_t kDanceDemoDurationMs = 120000;
 constexpr uint32_t kDanceBalanceReadyMs = 450;
-constexpr uint32_t kDanceStandTriggerMs = 6000;
+constexpr uint32_t kDanceStandTriggerMs = 5000;
 
 struct DanceCue {
   uint16_t durationMs;
@@ -74,75 +74,63 @@ struct DanceCue {
 };
 
 constexpr DanceCue kDanceDemoCues[] = {
-    // 0:00 - 0:12 Awakening
-    {kDanceCueDurationMs,   0, 46,   0,   0,  0},   // 00
-    {kDanceCueDurationMs,   0, 46,   0,   0,  0},   // 01
-    {kDanceCueDurationMs,   0, 46,   0,   0,  0},   // 02
-    {kDanceCueDurationMs,   0, 46,   0,   0,  0},   // 03
-    {kDanceCueDurationMs,   0, 46,   0,   0,  0},   // 04
-    {kDanceCueDurationMs,   0, 46,   0,   0,  0},   // 05
-    {kDanceCueDurationMs,   0, 55,   0,   0,  0},   // 06 stand starts
-    {kDanceCueDurationMs,   0, 55,   0,   0,  0},   // 07
-    {kDanceCueDurationMs,   0, 55,   0,   0, 20},   // 08
-    {kDanceCueDurationMs,   0, 57,   0,   0, 20},   // 09
-    {kDanceCueDurationMs,   0, 58,   0,   0, 20},   // 10
-    {kDanceCueDurationMs,   0, 55,   0,   0, 20},   // 11
+    // 0:00 - 0:15 ACT I — Entrance / Awakening
+    {1000,  0, 46,   0,  0,  0}, {1000,  0, 46,   0,  0,  0}, {1000,  0, 46,   0,  0,  0},
+    {1000,  0, 46,   0,  0,  0}, {1000,  0, 46,   0,  0, 15}, {1000,  0, 49,   0,  0, 15},
+    {1000,  0, 52,   0,  0, 15}, {1000,  0, 55,   0,  0, 15}, {1000,  0, 59,   0,  0, 20},
+    {1000,  0, 60,   0,  0, 20}, {1000,-12, 60,   0,  0, 20}, {1000,  0, 57,   0,  0, 20},
+    {1000, 12, 57,   0,  0, 20}, {1000,  0, 57,   0,  0, 25}, {1000,  0, 55,   0,  0, 25},
 
-    // 0:12 - 0:24 First waltz breath
-    {kDanceCueDurationMs,   0, 62,   0,   0, 20},   // 12
-    {kDanceCueDurationMs,   0, 54,   0,   0, 20},   // 13
-    {kDanceCueDurationMs,   0, 54,   0,   0, 20},   // 14
-    {kDanceCueDurationMs, -18, 54,   0,   0, 20},   // 15
-    {kDanceCueDurationMs, -12, 52,   0,   0, 20},   // 16
-    {kDanceCueDurationMs,   0, 52,   0,   0, 20},   // 17
-    {kDanceCueDurationMs,  18, 58,   0,   0, 20},   // 18
-    {kDanceCueDurationMs,   8, 55,   0,   0, 20},   // 19
-    {kDanceCueDurationMs,   0, 55,   0,   0, 20},   // 20
-    {kDanceCueDurationMs,   0, 55,   0,   0, 20},   // 21
-    {kDanceCueDurationMs,   0, 55,   0,   0, 25},   // 22
-    {kDanceCueDurationMs,   0, 55,   0,   0, 25},   // 23
+    // 0:15 - 0:35 ACT II — First Waltz Breath
+    {1000,  0, 62,   0,  0, 25}, {1000,  0, 58,   0,  0, 25}, {1000,-18, 55,   0,  0, 25},
+    {1000,-18, 52,   0,  0, 25}, {1000,-10, 52,   0,  0, 25}, {1000,  0, 55,  10,  0, 25},
+    {1000, 18, 58,  10,  0, 25}, {1000, 18, 55,   8,  0, 25}, {1000, 10, 55,   6,  0, 30},
+    {1000,  0, 55,   4,  0, 30}, {1000,  0, 60, -10,  0, 30}, {1000,  0, 60,-10,  0, 30},
+    {1000,  0, 58,  10,  0, 30}, {1000,  0, 55,  10,  0, 30}, {1000,-15, 57,   0,  0, 30},
+    {1000, 15, 57,   0,  0, 30}, {1000,  0, 55,   0,  0, 25}, {1000,  0, 55,   0,  0, 25},
+    {1000,  0, 55,   0,  0, 25}, {1000,  0, 55,   0,  0, 25},
 
-    // 0:24 - 0:36 Promenade glide
-    {kDanceCueDurationMs,   0, 60,   8,  18, 25},   // 24
-    {kDanceCueDurationMs,   0, 60,   6,  16, 25},   // 25
-    {kDanceCueDurationMs,   0, 56,   4,  12, 25},   // 26
-    {kDanceCueDurationMs, -15, 55, -16,  10, 25},   // 27
-    {kDanceCueDurationMs, -10, 55, -12,   8, 25},   // 28
-    {kDanceCueDurationMs,  -5, 55,  -8,   6, 25},   // 29
-    {kDanceCueDurationMs,  15, 54,  16,   8, 25},   // 30
-    {kDanceCueDurationMs,  10, 53,  12,   6, 25},   // 31
-    {kDanceCueDurationMs,   5, 53,   8,   4, 25},   // 32
-    {kDanceCueDurationMs,   0, 61,  -8,   0, 25},   // 33
-    {kDanceCueDurationMs,   0, 60,  -4,   0, 25},   // 34
-    {kDanceCueDurationMs,   0, 60,   0,   0, 25},   // 35
+    // 0:35 - 0:55 ACT III — Promenade Glide
+    {1000,  0, 60,   6, 16, 25}, {1000,  0, 60,   6, 16, 25}, {1000,  0, 58,   6, 14, 25},
+    {1000,  0, 55,   4, 10, 25}, {1000,  0, 58, -18,  6, 25}, {1000,-18, 60,-18,  6, 25},
+    {1000,-18, 58,-18,  4, 25}, {1000,-10, 55,-12,  0, 25}, {1000, 18, 55, 18,  4, 25},
+    {1000, 18, 58, 18,  4, 25}, {1000, 10, 60, 18,  2, 25}, {1000,  0, 58, 10,  0, 25},
+    {1000,  0, 57,   6,  8, 30}, {1000,  0, 60,   6, 10, 35}, {1000,  0, 58,   4,  8, 35},
+    {1000,  0, 55,   0,  0, 35}, {1000,  0, 60,   0,  0, 35}, {1000,-12, 60,   0,  0, 35},
+    {1000,  0, 58,   0,  0, 35}, {1000,  0, 55,   0,  0, 35},
 
-    // 0:36 - 0:48 Waltz turn and sway
-    {kDanceCueDurationMs, -10, 62, -36,   6, 25},   // 36
-    {kDanceCueDurationMs, -20, 58, -32,   4, 25},   // 37
-    {kDanceCueDurationMs, -12, 58, -22,   2, 25},   // 38
-    {kDanceCueDurationMs,  10, 54,  36,   4, 25},   // 39
-    {kDanceCueDurationMs,  20, 54,  32,   2, 25},   // 40
-    {kDanceCueDurationMs,  10, 54,  20,   0, 25},   // 41
-    {kDanceCueDurationMs,   0, 60,   8,  14, 25},   // 42
-    {kDanceCueDurationMs,  -8, 58, -12,  10, 25},   // 43
-    {kDanceCueDurationMs,   0, 58,   0,   4, 25},   // 44
-    {kDanceCueDurationMs,   0, 55,  10,   0, 25},   // 45
-    {kDanceCueDurationMs,   0, 55,   0,   0, 25},   // 46
-    {kDanceCueDurationMs,   0, 55,   0,   0, 25},   // 47
+    // 0:55 - 1:15 ACT IV — Waltz Turn Sequence
+    {1000,-18, 62,-26,  0, 35}, {1000,-20, 60,-26,  0, 35}, {1000,-12, 58,-26,  0, 35},
+    {1000,  0, 55,-20,  0, 35}, {1000, 18, 55, 26,  0, 35}, {1000, 20, 58, 26,  0, 35},
+    {1000, 10, 60, 26,  0, 35}, {1000,  0, 58, 20,  0, 35}, {1000,  0, 60,-14,  0, 35},
+    {1000,  0, 60,-14,  0, 35}, {1000,  0, 58, 14,  0, 35}, {1000,  0, 58, 14,  0, 35},
+    {1000,  0, 60,   0,  0, 35}, {1000,  0, 60,-30,  0, 35}, {1000,  0, 60, 30,  0, 35},
+    {1000,  0, 58,   0,  0, 35}, {1000,  0, 55,   0,  0, 30}, {1000,  0, 55,   0,  0, 25},
+    {1000,  0, 55,   0,  0, 25}, {1000,  0, 55,   0,  0, 25},
 
-    // 0:48 - 1:00 Pivot flourish and presentation
-    {kDanceCueDurationMs,   0, 64,   0,   0, 25},   // 48
-    {kDanceCueDurationMs,   0, 64, -55,   0, 25},   // 49 pivot left
-    {kDanceCueDurationMs,   0, 64,  55,   0, 25},   // 50 pivot right
-    {kDanceCueDurationMs,   0, 58, -78,   0, 25},   // 51 showcase spin
-    {kDanceCueDurationMs,   0, 58, -26,   0, 25},   // 52 settle
-    {kDanceCueDurationMs,   0, 58,  24,   0, 25},   // 53 face front
-    {kDanceCueDurationMs,   0, 60,   4,  10, 45},   // 54 toe-lift illusion + guard
-    {kDanceCueDurationMs,   0, 53,   0,   0, 45},   // 55
-    {kDanceCueDurationMs,   0, 53,   0,   0, 45},   // 56 bow
-    {kDanceCueDurationMs,   0, 60,   0,   0, 45},   // 57
-    {kDanceCueDurationMs,   0, 58,   0,   0, 25},   // 58
-    {kDanceCueDurationMs,   0, 57,   0,   0, 25},   // 59 final pose
+    // 1:15 - 1:35 ACT V — Spin Flourish
+    {1000,  0, 64,   0,  0, 25}, {1000,  0, 64,-78,  0, 25}, {1000,  0, 62,-78,  0, 25},
+    {1000,  0, 58,   0,  0, 25}, {1000,  0, 58,   0,  0, 25}, {1000,  0, 60, 26,  0, 25},
+    {1000, 18, 58, 26,  0, 25}, {1000, 18, 55, 18,  0, 25}, {1000,  0, 55,-26,  0, 25},
+    {1000,-18, 58,-26,  0, 25}, {1000,-18, 55,-18,  0, 25}, {1000,  0, 58,   0,  0, 25},
+    {1000,  0, 64,  78,  0, 25}, {1000,  0, 64,  78,  0, 25}, {1000,  0, 60,   0,  0, 25},
+    {1000,  0, 60,   0,  0, 40}, {1000,  0, 60,   0,  0, 40}, {1000,  0, 58,   0,  0, 35},
+    {1000,  0, 58,   0,  0, 30}, {1000,  0, 58,   0,  0, 30},
+
+    // 1:35 - 1:55 ACT VI — Elegant Return / Bow Preparation
+    {1000,  0, 60,   4, 10, 30}, {1000,  0, 60,   4, 10, 30}, {1000,  0, 58,   4, 10, 30},
+    {1000,  0, 55,   0,  0, 30}, {1000,-15, 55,-12,  0, 30}, {1000,-15, 55,-12,  0, 30},
+    {1000, 15, 55, 12,  0, 30}, {1000, 15, 55, 12,  0, 30}, {1000,  0, 55,   0,  0, 30},
+    {1000,  0, 60,   0,  0, 30}, {1000,  0, 60,   0,  0, 35}, {1000,  0, 58,   0,  0, 45},
+    {1000,  0, 55,   0,  0, 45}, {1000,  0, 57,   4,  8, 45}, {1000,  0, 58,   0,  0, 45},
+    {1000,  0, 58,   0,  0, 35}, {1000,  0, 57,   0,  0, 30}, {1000,  0, 57,   0,  0, 30},
+    {1000,  0, 57,   0,  0, 30}, {1000,  0, 57,   0,  0, 30},
+
+    // 1:55 - 2:00 ACT VII — Final Bow / Presentation
+    {1000,  0, 60,   0,  0, 45}, {1000,  0, 60,   0,  0, 45}, {1000,  0, 52,   0,  0, 45},
+    {1000,  0, 55,   0,  0, 45}, {1000,  0, 58,   0,  0, 35}, {1000,  0, 58,   0,  0, 30},
+    {1000,  0, 58,   0,  0, 25}, {1000,  0, 58,   0,  0, 25}, {1000,  0, 58,   0,  0, 25},
+    {1000,  0, 58,   0,  0, 25}, {1000,  0, 58,   0,  0, 25}, {1000,  0, 58,   0,  0, 25},
 };
 
 struct TrackingTuning {

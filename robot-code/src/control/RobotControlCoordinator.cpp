@@ -40,7 +40,7 @@ float easeInOutSine(float t) {
   return 0.5f - 0.5f * cosf(t * PI);
 }
 
-float interpolateKeyframes(const uint16_t* timesMs, const int* values,
+float interpolateKeyframes(const uint32_t* timesMs, const int* values,
                            size_t count, uint32_t timeMs) {
   if (count == 0) return 0.0f;
   if (timeMs <= timesMs[0]) return (float)values[0];
@@ -55,14 +55,15 @@ float interpolateKeyframes(const uint16_t* timesMs, const int* values,
 }
 
 CRGB colorForWaltzTime(uint32_t elapsedMs) {
-  if (elapsedMs < 12000U) {
+  if (elapsedMs < 15000U) {
     return lerpColor(CRGB(36, 16, 4), CRGB(84, 48, 14),
-                     constrain((float)elapsedMs / 12000.0f, 0.0f, 1.0f));
+                     constrain((float)elapsedMs / 15000.0f, 0.0f, 1.0f));
   }
-  if (elapsedMs < 24000U) return CRGB(148, 110, 36);
-  if (elapsedMs < 36000U) return CRGB(90, 118, 190);
-  if (elapsedMs < 48000U) return CRGB(60, 88, 178);
-  if (elapsedMs < 54000U) return CRGB(172, 136, 44);
+  if (elapsedMs < 35000U) return CRGB(148, 110, 36);
+  if (elapsedMs < 55000U) return CRGB(90, 118, 190);
+  if (elapsedMs < 75000U) return CRGB(60, 88, 178);
+  if (elapsedMs < 95000U) return CRGB(176, 136, 44);
+  if (elapsedMs < 115000U) return CRGB(82, 112, 204);
   return CRGB(30, 54, 150);
 }
 
@@ -86,19 +87,19 @@ void updateWaltzPresentation() {
 
   const uint32_t delayedMs =
       telemetry.danceElapsedMs > 300U ? telemetry.danceElapsedMs - 300U : 0U;
-  static const uint16_t kHeadTimesMs[] = {
-      0, 3000, 5000, 6000, 8000, 11000,
-      14000, 17000, 20000, 23000,
-      25000, 29000, 32000, 35000,
-      38000, 41000, 44000, 47000,
-      50000, 53000, 56000, 57000, 59000, 60000
+  static const uint32_t kHeadTimesMs[] = {
+      0, 2000, 5300, 8500, 10000, 14000,
+      15300, 19000, 22300, 24300, 27000, 29000, 32000, 34000,
+      35300, 38500, 41500, 44500, 47300, 50000, 55300, 60000,
+      63000, 69300, 76000, 78500, 81000, 85500, 92000, 95300,
+      99000, 106000, 109000, 113000, 116000, 118000, 119000, 120000
   };
   static const int kHeadAnglesDeg[] = {
-      -12, -4, -4, 3, 3, 0,
-      6, 0, -4, 4,
-      0, 7, -4, 8,
-      6, 0, -5, 9,
-      10, 0, -8, 6, 0, 0
+      -10, -3, 3, 0, 0, 0,
+      6, -4, 0, 7, 0, -4, 0, 0,
+      6, -5, 0, 8, -4, 0, 7, 0,
+      -4, 10, 12, 0, -4, 0, 0, 6,
+      9, -8, 0, 0, -10, 6, 0, 0
   };
   const int cameraTarget = constrain(
       (int)roundf(kWaltzCameraNeutralDeg +
@@ -112,9 +113,9 @@ void updateWaltzPresentation() {
   const float beatPhase = beatPhaseMs / 1000.0f;
   const CRGB base = colorForWaltzTime(telemetry.danceElapsedMs);
   const CRGB accent =
-      telemetry.danceElapsedMs < 12000U ? CRGB(150, 110, 50)
-      : telemetry.danceElapsedMs < 24000U ? CRGB(220, 180, 96)
-      : telemetry.danceElapsedMs < 48000U ? CRGB(120, 180, 255)
+      telemetry.danceElapsedMs < 15000U ? CRGB(150, 110, 50)
+      : telemetry.danceElapsedMs < 35000U ? CRGB(220, 180, 96)
+      : telemetry.danceElapsedMs < 95000U ? CRGB(120, 180, 255)
       : CRGB(255, 204, 100);
   const float pulse = beatPhase < 0.24f ? (1.0f - beatPhase / 0.24f) : 0.0f;
   setLEDColor(lerpColor(base, accent, pulse * 0.82f));
